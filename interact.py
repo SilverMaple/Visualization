@@ -3,16 +3,19 @@
 # @Author  : SilverMaple
 # @Site    : https://github.com/SilverMaple
 # @File    : interact.py
-import pickle
-import pyqtgraph as pg
+
+from threading import _start_new_thread
 from visualization import Network
+from FR import FRLayout, FR3DLayout
 import sys
-from PyQt5 import QtCore, QtGui
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, QLineF, QRectF, QPoint
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGraphicsScene, QVBoxLayout, QGridLayout, \
-QSizePolicy, QMessageBox, QWidget, QDesktopWidget, QPushButton, QLabel, QLineEdit, QHBoxLayout, QComboBox, QFileDialog, \
-QGraphicsLineItem
-from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QPalette
+from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGraphicsScene, QGridLayout, \
+    QMessageBox, QWidget, QPushButton, QGraphicsLineItem
+from PyQt5.QtGui import QPainter, QPen, QColor
+import pyqtgraph as pg
+from pyqtgraph.Qt import QtCore, QtGui
+import pyqtgraph.opengl as gl
+import numpy as np
 
 POINT_SIZE = 10
 APP_WIDTH = 1320
@@ -20,7 +23,6 @@ APP_HEIGHT = 500
 
 
 class Point:
-
     def __init__(self, x, y, name, color=None):
         self.x = x
         self.y = y
@@ -30,7 +32,6 @@ class Point:
 
 
 class Line:
-
     def __init__(self, a, b, color_index, color=None):
         self.a = a
         self.b = b
@@ -39,10 +40,10 @@ class Line:
         self.display = True
 
 
-
-class Messenger():
+class Messenger:
     def __init__(self):
         self.setupFlag = False
+        self.statusBar = None
 
     def setup(self, statusBar):
         self.statusBar = statusBar
@@ -55,12 +56,13 @@ class Messenger():
         except Exception as e:
             print(e)
 
+
 messenger = Messenger()
 
 
 class PointButton(QPushButton):
-    def __init__(self, ig, index, color, *args, **kwargs):
-        QPushButton.__init__(self, *args, **kwargs)
+    def __init__(self, ig, index, color, *args):
+        QPushButton.__init__(self, *args)
         self.setMouseTracking(False)
         self.setStyleSheet(('''
         QPushButton{
@@ -111,8 +113,8 @@ class PointButton(QPushButton):
         messenger.changeStatusBar(message)
 
     def dragMoveEvent(self, event):
-        print('dragging: ', event.pos().x(), event.pos().y())
-        self.move(event.pos().x(), event.pos().y())
+        message = 'drag move at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
+        messenger.changeStatusBar(message)
 
     def dragLeaveEvent(self, event):
         message = 'drag leave at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
@@ -137,6 +139,7 @@ class PointButton(QPushButton):
         message = 'Leave in point: ' + str(self.index + 1)
         vLineScene.leavePoint()
         messenger.changeStatusBar(message)
+
 
 class LineItem(QGraphicsLineItem):
     def __init__(self, ig, index, color, view, *args, **kwargs):
@@ -196,9 +199,11 @@ class LineItem(QGraphicsLineItem):
 
 
 class ResultPainter(QWidget):
-    def __init__(self, ig):
-        super().__init__()
+    def __init__(self, ig, *args):
+        super().__init__(*args)
         self.ig = ig
+        self.entropy = None
+        self.trigger = False
         self.initUI()
 
     def initUI(self):
@@ -210,14 +215,12 @@ class ResultPainter(QWidget):
         self.entropy = self.ig.network.get_entropy()
         for i in range(len(self.entropy)):
             self.entropy[i] = float(self.entropy[i].replace('\n', ''))
-        self.trigger = False
 
     def paintEvent(self, e):
         qp = QPainter()
         qp.begin(self)
         self.draw(qp)
         qp.end()
-
 
     def triggerUpdate(self):
         self.trigger = True
@@ -226,14 +229,14 @@ class ResultPainter(QWidget):
     def draw(self, qp):
         index = 0
         for i in range(len(self.entropy)):
-            pen = QPen(QColor(ig.colors[i]), 1, QtCore.Qt.SolidLine)
+            pen = QPen(QColor(self.ig.colors[i]), 1, QtCore.Qt.SolidLine)
             qp.setPen(pen)
-            qp.drawText(5, index*20+20, "●")
+            qp.drawText(5, index * 20 + 20, "●")
             pen = QPen(QtCore.Qt.black, 1, QtCore.Qt.SolidLine)
             qp.setPen(pen)
-            qp.drawText(20, index*20+20, "社区%s的信息熵：%f" % (str(index+1), self.entropy[i]))
+            qp.drawText(20, index * 20 + 20, "社区%s的信息熵：%f" % (str(index + 1), self.entropy[i]))
             index += 1
-        qp.drawText(15, (index+1)*20, "信息熵的总和：%f" % sum([i for i in self.entropy]))
+        qp.drawText(15, (index + 1) * 20, "信息熵的总和：%f" % sum([i for i in self.entropy]))
 
         if self.trigger:
             qp.drawText(15, 200, "输出：%f" % sum([i for i in self.entropy]))
@@ -247,6 +250,7 @@ class NetworkView(QGraphicsView):
         self.m_zoomDelta = 0.1
         self.m_translateSpeed = 2.0
         self.m_bMouseTranslate = False
+        self.m_lastMousePos = None
 
         self.setRenderHint(QPainter.Antialiasing)
 
@@ -271,25 +275,24 @@ class NetworkView(QGraphicsView):
     def zoomDelta(self):
         return self.m_zoomDelta
 
-
     # 上 / 下 / 左 / 右键向各个方向移动、加 / 减键进行缩放、空格 / 回车键旋转
     def keyPressEvent(self, event):
         messenger.changeStatusBar('Key pressed: %s' % event.key())
         # 使用==不能用is，因为类型不同值相同
         if event.key() == Qt.Key_Up:
-            self.translate(0, -2) # 上移
+            self.translate(0, -2)  # 上移
         elif event.key() == Qt.Key_Down:
-            self.translate(0, 2) # 下移
+            self.translate(0, 2)  # 下移
         elif event.key() == Qt.Key_Left:
-            self.translate(-2, 0) # 左移
+            self.translate(-2, 0)  # 左移
         elif event.key() == Qt.Key_Right:
-            self.translate(2, 0) # 右移
+            self.translate(2, 0)  # 右移
         elif event.key() == Qt.Key_Plus:
-            self.zoomIn() # 放大
+            self.zoomIn()  # 放大
         elif event.key() == Qt.Key_Minus:
-            self.zoomOut() # 缩小
+            self.zoomOut()  # 缩小
         elif event.key() == Qt.Key_Space:
-            self.rotate(-5) # 逆时针旋转
+            self.rotate(-5)  # 逆时针旋转
         elif event.key() == Qt.Key_Enter \
                 or event.key() == Qt.Key_Return:
             self.rotate(5)
@@ -403,10 +406,10 @@ class NetworkScene(QGraphicsScene):
         self.lineItem = []
         for i in range(len(self.ig.lines)):
             # 初始化默认显示所有
-            x = self.ig.points[self.ig.lines[i].a-1].x + POINT_SIZE / 2
-            y = self.ig.points[self.ig.lines[i].a-1].y + POINT_SIZE / 2
-            x1 = self.ig.points[self.ig.lines[i].b-1].x + POINT_SIZE / 2
-            y1 = self.ig.points[self.ig.lines[i].b-1].y + POINT_SIZE / 2
+            x = self.ig.points[self.ig.lines[i].a - 1].x + POINT_SIZE / 2
+            y = self.ig.points[self.ig.lines[i].a - 1].y + POINT_SIZE / 2
+            x1 = self.ig.points[self.ig.lines[i].b - 1].x + POINT_SIZE / 2
+            y1 = self.ig.points[self.ig.lines[i].b - 1].y + POINT_SIZE / 2
 
             pItem = LineItem(self.ig, i, self.ig.lines[i].color, self)
             # 设置直线位于(x1, y1)和(x2, y2)之间
@@ -416,6 +419,19 @@ class NetworkScene(QGraphicsScene):
             # 将item添加至场景中
             self.addItem(pItem)
 
+    def reload(self):
+        for i in range(len(self.ig.points)):
+            self.buttons[i].move(self.ig.points[i].x, self.ig.points[i].y)
+
+        for i in range(len(self.ig.lines)):
+            # 初始化默认显示所有
+            x = self.ig.points[self.ig.lines[i].a - 1].x + POINT_SIZE / 2
+            y = self.ig.points[self.ig.lines[i].a - 1].y + POINT_SIZE / 2
+            x1 = self.ig.points[self.ig.lines[i].b - 1].x + POINT_SIZE / 2
+            y1 = self.ig.points[self.ig.lines[i].b - 1].y + POINT_SIZE / 2
+            self.lineItem[i].setLine(QLineF(x, y, x1, y1))
+        self.restoreScene()
+
     def focusPoint(self, index):
         for b in self.buttons:
             b.setWindowOpacity(.3)
@@ -424,7 +440,7 @@ class NetworkScene(QGraphicsScene):
         self.buttons[index].setWindowOpacity(1)
         self.buttons[index].resize(15, 15)
         for line in self.lineItem:
-            if line.a == index+1 or line.b == index+1:
+            if line.a == index + 1 or line.b == index + 1:
                 line.setOpacity(1)
                 line.focus()
             else:
@@ -474,12 +490,12 @@ class NetworkScene(QGraphicsScene):
                 continue
             elif self.ig.lines[i].display and not self.lineItem[i].isVisible():
                 self.lineItem[i].setVisible(True)
-            if self.ig.points[self.ig.lines[i].a-1].display and self.ig.points[self.ig.lines[i].b-1].display\
+            if self.ig.points[self.ig.lines[i].a - 1].display and self.ig.points[self.ig.lines[i].b - 1].display \
                     and self.ig.lines[i].display:
-                x = self.ig.points[self.ig.lines[i].a-1].x + POINT_SIZE / 2
-                y = self.ig.points[self.ig.lines[i].a-1].y + POINT_SIZE / 2
-                x1 = self.ig.points[self.ig.lines[i].b-1].x + POINT_SIZE / 2
-                y1 = self.ig.points[self.ig.lines[i].b-1].y + POINT_SIZE / 2
+                x = self.ig.points[self.ig.lines[i].a - 1].x + POINT_SIZE / 2
+                y = self.ig.points[self.ig.lines[i].a - 1].y + POINT_SIZE / 2
+                x1 = self.ig.points[self.ig.lines[i].b - 1].x + POINT_SIZE / 2
+                y1 = self.ig.points[self.ig.lines[i].b - 1].y + POINT_SIZE / 2
                 # qp.drawLine(x, y, x1, y1)
             else:
                 self.ig.lines[i].display = False
@@ -537,19 +553,27 @@ class ViewPainter(QWidget):
             pen = QPen(QColor(self.ig.lines[i].color), 1, QtCore.Qt.SolidLine)
             qp.setPen(pen)
 
-            if self.ig.points[self.ig.lines[i].a-1].display and self.ig.points[self.ig.lines[i].b-1].display\
+            if self.ig.points[self.ig.lines[i].a - 1].display and self.ig.points[self.ig.lines[i].b - 1].display \
                     and self.ig.lines[i].display:
-                x = self.ig.points[self.ig.lines[i].a-1].x + POINT_SIZE / 2
-                y = self.ig.points[self.ig.lines[i].a-1].y + POINT_SIZE / 2
-                x1 = self.ig.points[self.ig.lines[i].b-1].x + POINT_SIZE / 2
-                y1 = self.ig.points[self.ig.lines[i].b-1].y + POINT_SIZE / 2
+                x = self.ig.points[self.ig.lines[i].a - 1].x + POINT_SIZE / 2
+                y = self.ig.points[self.ig.lines[i].a - 1].y + POINT_SIZE / 2
+                x1 = self.ig.points[self.ig.lines[i].b - 1].x + POINT_SIZE / 2
+                y1 = self.ig.points[self.ig.lines[i].b - 1].y + POINT_SIZE / 2
                 qp.drawLine(x, y, x1, y1)
+
+        if self.ig.threadDone:
+            self.ig.threadDone = False
+            vLineScene.reload()
+            vLineView.update()
+            message = 'Fruchterman-Reingold布局完成'
+            messenger.changeStatusBar(message)
 
 
 class InteractGraph(QMainWindow):
-
     def __init__(self):
         QMainWindow.__init__(self)
+        self.network = None
+        self.threadDone = False
         self.readPoint()
         self.readLine()
         self.initNetwork()
@@ -567,8 +591,8 @@ class InteractGraph(QMainWindow):
         self.file_menu = QMenu('&文件', self)
         self.file_menu.addAction('&打开', self.loadData,
                                  QtCore.Qt.CTRL + QtCore.Qt.Key_O)
-        self.file_menu.addAction('&保存', self.saveData,
-                                 QtCore.Qt.CTRL + QtCore.Qt.Key_S)
+        self.file_menu.addAction('&重新布局', self.reloadLayout,
+                                 QtCore.Qt.CTRL + QtCore.Qt.Key_L)
         self.file_menu.addAction('&还原', self.restoreData,
                                  QtCore.Qt.CTRL + QtCore.Qt.Key_D)
         self.file_menu.addAction('&退出', self.fileQuit,
@@ -578,7 +602,7 @@ class InteractGraph(QMainWindow):
         self.menuBar().addSeparator()
         self.menuBar().addAction('&打开', self.loadData)
         self.menuBar().addSeparator()
-        self.menuBar().addAction('&保存', self.saveData)
+        self.menuBar().addAction('&重新布局', self.reloadLayout)
         self.menuBar().addSeparator()
         self.menuBar().addAction('&还原', self.restoreData)
         self.menuBar().addSeparator()
@@ -587,7 +611,6 @@ class InteractGraph(QMainWindow):
 
         self.main_widget = QWidget(self)
 
-        globalLayout = QHBoxLayout(self.main_widget)
         l = QGridLayout(self.main_widget)
 
         global vLineView
@@ -606,8 +629,12 @@ class InteractGraph(QMainWindow):
 
         vpFrontView = ViewPainter(self)
         vpResultView = ResultPainter(self)
+        v3DView = self.get3DView()
+        # v3DView.setAutoBufferSwap(False)
+        v3DView.show()
 
         self.vpViews = [vpFrontView, vpResultView, vLineView]
+        # self.vpViews = [vpFrontView, vLineView]
 
         self.graphicViews = []
         for i in range(len(self.vpViews)):
@@ -622,14 +649,14 @@ class InteractGraph(QMainWindow):
             self.graphicViews[i].setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             self.graphicViews[i].setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             # self.graphicViews[i].setMinimumSize(500, 300)
+            l.addWidget(self.graphicViews[i], 0, i)
 
-
-        l.addWidget(self.graphicViews[0], 0, 0)
-        l.addWidget(self.graphicViews[1], 0, 1)
-        l.addWidget(self.graphicViews[2], 0, 2)
+        # l.addWidget(self.graphicViews[0], 0, 0)
+        # l.addWidget(self.graphicViews[1], 0, 1)
+        # l.addWidget(self.graphicViews[2], 0, 2)
+        # l.addWidget(self.graphicViews[3], 0, 3)
 
         self.gridLayout = l
-        globalLayout.addLayout(self.gridLayout)
 
         self.main_widget.setFocus()
         self.setCentralWidget(self.main_widget)
@@ -639,9 +666,87 @@ class InteractGraph(QMainWindow):
         messenger.setup(self.statusBar())
         self.center()
 
+    def get3DView(self):
+        w = gl.GLViewWidget()
+        w.opts['distance'] = 20
+        w.show()
+        w.setWindowTitle('Network 3D Graph')
+
+        g = gl.GLGridItem()
+        w.addItem(g)
+        colors = []
+        fr = FR3DLayout()
+        points = fr.outputLayout()
+        print(points)
+        # Gradient = A + (B - A) * N / Step
+        # colorA = (1, 0, 0)
+        # colorB = (0, 0, 1)
+        # for i in range(1, 10):
+        #     a = colorA[0] + (colorB[0] - colorA[0]) * i / 10.0
+        #     b = colorA[1] + (colorB[1] - colorA[1]) * i / 10.0
+        #     c = colorA[2] + (colorB[2] - colorA[2]) * i / 10.0
+        #     colors.append((a, b, c, 0.8))
+        colors = [(1, 0, 0, .8), (0, 1, 0, .8), (0, 0, 1, .8),
+                  (1, 1, 0, .8), (1, 0, 1, .8), (0, 1, 1, .8)]
+
+        pos = np.empty((105, 3))
+        size = np.empty(105)
+        color = np.empty((105, 4))
+        for i in range(len(self.points)):
+            pos[i] = ((points[i+1][0] - 1700)/300.0,
+                      (points[i+1][1]-1700)/300.0,
+                      (points[i+1][2]-200)/300.0)
+            size[i] = 0.01
+            color[i] = colors[self.colors.index(self.points[i].color)]
+            # print(color[i])
+
+        sp1 = gl.GLScatterPlotItem(pos=pos, size=size, color=color, pxMode=False)
+        sp1.translate(5, 5, 0)
+        n = 51
+
+        for i in range(len(self.lines)):
+            x = [pos[self.lines[i].a-1][0], pos[self.lines[i].b-1][0]]
+            y = [pos[self.lines[i].a-1][1], pos[self.lines[i].b-1][1]]
+            z = [pos[self.lines[i].a-1][2], pos[self.lines[i].b-1][2]]
+            tmp = None
+            if self.lines[i].color in self.colors:
+                tmp = colors[self.colors.index(self.lines[i].color)]
+            else:
+                tmp = (1, 1, 1, 0.8)
+
+            pts = np.vstack([x, y, z]).transpose()
+            plt = gl.GLLinePlotItem(pos=pts, color=tmp, width=.5, antialias=True)
+            plt.translate(5, 5, 0)
+            w.addItem(plt)
+
+        w.addItem(sp1)
+        return w
+
     def center(self):  # 主窗口居中显示函数
         screen = QtGui.QDesktopWidget().screenGeometry()
         self.move((screen.width() - APP_WIDTH) / 2, (screen.height() - APP_HEIGHT) / 2)
+
+    def reloadLayout(self):
+        message = 'Fruchterman-Reingold重新布局中...'
+        messenger.changeStatusBar(message)
+        # 创建两个线程
+        try:
+            _start_new_thread(self.reloadLayoutThread, (self,))
+        except Exception as e:
+            print("Error: unable to start thread")
+            message = 'Fruchterman-Reingold布局失败！'
+            messenger.changeStatusBar(message)
+            print(e)
+
+    def reloadLayoutThread(self, useless):
+        fr = FRLayout()
+        fr.outputLayout()
+        self.readPoint()
+        self.threadDone = True
+        messenger.changeStatusBar('')
+        vpFrontView.update()
+        # vLineScene.reload()
+        # vLineView.update()
 
     def about(self):
         QMessageBox.about(self, "帮助",
@@ -654,29 +759,29 @@ class InteractGraph(QMainWindow):
     Ctrl   +   O: 打开数据文件 //未涉及
     Ctrl   +   D: 还原当前数据
     Ctrl   +   S: 保存当前数据 //未涉及
-    Wheel     Up：放大
-    Wheel   Down：缩小
+    Wheel   Up：放大
+    Wheel Down：缩小
     Enter       ：顺势针旋转
     Space       ：逆时针旋转
     Double Click：还原当前数据
     3. 面板说明：
     左视图：不可交互
     中视图：信息熵结果展示与操作区域
-    又试图：交互面板
+    右试图：交互面板
     4. 程序代码可在以下地址获取：
     https://github.com/SilverMaple/Visualization
         """
                           )
 
     def loadData(self):
-        self.clearData()
         pass
 
     def saveData(self):
         # save as a graph
         pass
 
-    def restoreData(self):
+    @staticmethod
+    def restoreData():
         vLineScene.restoreScene()
 
     def fileQuit(self):
@@ -695,7 +800,7 @@ class InteractGraph(QMainWindow):
                 c = c[:-2]
                 if c not in self.colors:
                     self.colors.append(c)
-                self.points.append(Point(float(a), float(b), len(self.points)+1, color=c))
+                self.points.append(Point(float(a), float(b), len(self.points) + 1, color=c))
             except Exception as e:
                 print(e)
 
