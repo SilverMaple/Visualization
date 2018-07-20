@@ -7,6 +7,7 @@
 from threading import _start_new_thread
 from visualization import Network
 from FR import FRLayout, FR3DLayout
+from KK import KKLayout
 import sys
 from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGraphicsScene, QGridLayout, \
@@ -565,7 +566,11 @@ class ViewPainter(QWidget):
             self.ig.threadDone = False
             vLineScene.reload()
             vLineView.update()
-            message = 'Fruchterman-Reingold布局完成'
+            message = '布局完成'
+            if self.ig.layoutSelection is 'FR':
+                message = 'Fruchterman-Reingold布局完成'
+            elif self.ig.layoutSelection is 'KK':
+                message = 'Kamada-Kawai布局完成'
             messenger.changeStatusBar(message)
 
 
@@ -574,6 +579,7 @@ class InteractGraph(QMainWindow):
         QMainWindow.__init__(self)
         self.network = None
         self.threadDone = False
+        self.layoutSelection = 'FR'
         self.readPoint()
         self.readLine()
         self.initNetwork()
@@ -591,8 +597,8 @@ class InteractGraph(QMainWindow):
         self.file_menu = QMenu('&文件', self)
         self.file_menu.addAction('&打开', self.loadData,
                                  QtCore.Qt.CTRL + QtCore.Qt.Key_O)
-        self.file_menu.addAction('&重新布局', self.reloadLayout,
-                                 QtCore.Qt.CTRL + QtCore.Qt.Key_L)
+        # self.file_menu.addAction('&重新布局', self.reloadLayout,
+        #                          QtCore.Qt.CTRL + QtCore.Qt.Key_L)
         self.file_menu.addAction('&还原', self.restoreData,
                                  QtCore.Qt.CTRL + QtCore.Qt.Key_D)
         self.file_menu.addAction('&退出', self.fileQuit,
@@ -602,7 +608,11 @@ class InteractGraph(QMainWindow):
         self.menuBar().addSeparator()
         self.menuBar().addAction('&打开', self.loadData)
         self.menuBar().addSeparator()
-        self.menuBar().addAction('&重新布局', self.reloadLayout)
+        # self.menuBar().addAction('&重新布局', self.reloadLayout)
+        self.layout_menu = QMenu('&布局选择', self)
+        self.layout_menu.addAction('&FR布局', self.reloadFRLayout)
+        self.layout_menu.addAction('&KK布局', self.reloadKKLayout)
+        self.menuBar().addMenu(self.layout_menu)
         self.menuBar().addSeparator()
         self.menuBar().addAction('&还原', self.restoreData)
         self.menuBar().addSeparator()
@@ -702,7 +712,6 @@ class InteractGraph(QMainWindow):
 
         sp1 = gl.GLScatterPlotItem(pos=pos, size=size, color=color, pxMode=False)
         sp1.translate(5, 5, 0)
-        n = 51
 
         for i in range(len(self.lines)):
             x = [pos[self.lines[i].a-1][0], pos[self.lines[i].b-1][0]]
@@ -726,21 +735,45 @@ class InteractGraph(QMainWindow):
         screen = QtGui.QDesktopWidget().screenGeometry()
         self.move((screen.width() - APP_WIDTH) / 2, (screen.height() - APP_HEIGHT) / 2)
 
+    def reloadFRLayout(self):
+        self.layoutSelection = 'FR'
+        self.reloadLayout()
+
+    def reloadKKLayout(self):
+        self.layoutSelection = 'KK'
+        self.reloadLayout()
+
     def reloadLayout(self):
-        message = 'Fruchterman-Reingold重新布局中...'
-        messenger.changeStatusBar(message)
-        # 创建两个线程
-        try:
-            _start_new_thread(self.reloadLayoutThread, (self,))
-        except Exception as e:
-            print("Error: unable to start thread")
-            message = 'Fruchterman-Reingold布局失败！'
+        if self.layoutSelection is 'FR':
+            message = 'Fruchterman-Reingold重新布局中...'
             messenger.changeStatusBar(message)
-            print(e)
+            # 创建两个线程
+            try:
+                _start_new_thread(self.reloadLayoutThread, (self,))
+            except Exception as e:
+                print("Error: unable to start thread")
+                message = 'Fruchterman-Reingold布局失败！'
+                messenger.changeStatusBar(message)
+                print(e)
+        elif self.layoutSelection is 'KK':
+            message = 'Kamada-Kawai重新布局中...'
+            messenger.changeStatusBar(message)
+            # 创建两个线程
+            try:
+                _start_new_thread(self.reloadLayoutThread, (self,))
+            except Exception as e:
+                print("Error: unable to start thread")
+                message = 'Kamada-Kawai布局失败！'
+                messenger.changeStatusBar(message)
+                print(e)
 
     def reloadLayoutThread(self, useless):
-        fr = FRLayout()
-        fr.outputLayout()
+        if self.layoutSelection is 'FR':
+            fr = FRLayout()
+            fr.outputLayout()
+        elif self.layoutSelection is 'KK':
+            kk = KKLayout()
+            kk.outputLayout()
         self.readPoint()
         self.threadDone = True
         messenger.changeStatusBar('')

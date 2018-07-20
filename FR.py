@@ -132,7 +132,7 @@ class FRLayout():
     def runFR(self):
         self.init_vertices()
         for i in range(0, self.iterations):
-            print('FR:', i)
+            print('Fruchterman-Reingold V=%d(%d) IT: %d' % (len(self.vertexes), (len(self.vertexes)), i))
             if self.temperature < 0.02:
                 break
             self.algorithm_step()
@@ -345,7 +345,7 @@ class FR3DLayout():
     def runFR(self):
         self.init_vertices()
         for i in range(0, self.iterations):
-            print('FR:', i)
+            print('Fruchterman-Reingold V=%d(%d) IT: %d' % (len(self.vertexes), (len(self.vertexes)), i))
             if self.temperature < 0.02:
                 break
             self.algorithm_step()
