@@ -11,7 +11,7 @@ from KK import KKLayout
 import sys
 from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGraphicsScene, QGridLayout, \
-    QMessageBox, QWidget, QPushButton, QGraphicsLineItem
+    QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel
 from PyQt5.QtGui import QPainter, QPen, QColor
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
@@ -99,7 +99,7 @@ class PointButton(QPushButton):
 
     def mouseMoveEvent(self, event):
         message = 'move event at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
-        messenger.changeStatusBar(message)
+        # messenger.changeStatusBar(message)
 
     def mouseReleaseEvent(self, event):
         message = 'release event at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
@@ -122,6 +122,29 @@ class PointButton(QPushButton):
         messenger.changeStatusBar(message)
 
     def mousePressEvent(self, event):
+        self.setStyleSheet(('''
+        QPushButton{
+        background-color: %s ;
+        border-style: outset;
+        border-width: 1px;
+        border-radius: 5px;
+        border-color: black;
+        font: 1px;
+        padding: 0px;
+        }
+        QPushButton:hover {
+        background-color: %s;
+        border-style: inset;
+        }
+        QPushButton:pressed {
+        background-color: rgb(224, 0, 0);
+        border-style: inset;
+        }
+        QPushButton#cancel{
+            background-color: red ;
+        }
+        ''') % (self.color, self.color))
+        self.leaveEvent(event)
         message = 'press at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
         # print('press at point[ ', self.text(), ' ]: ', event.pos().x(), event.pos().y())
         self.ig.points[self.index].display = False
@@ -132,7 +155,41 @@ class PointButton(QPushButton):
         messenger.changeStatusBar(message)
 
     def enterEvent(self, *args, **kwargs):
-        message = 'Enter in point: ' + str(self.index + 1)
+        self.setStyleSheet(('''
+        QPushButton{
+        background-color: %s ;
+        border-style: outset;
+        border-width: 1px;
+        border-radius: 5px;
+        border-color: black;
+        font: 1px;
+        padding: 0px;
+        }
+        QPushButton:hover {
+        background-color: yellow;
+        border-style: inset;
+        }
+        QPushButton:pressed {
+        background-color: rgb(224, 0, 0);
+        border-style: inset;
+        }
+        QPushButton#cancel{
+            background-color: red ;
+        }
+        ''') % self.color)
+        inLineSum = 0
+        outLineSum = 0
+        for i in range(len(self.ig.lines)):
+            if self.ig.lines[i].display and \
+                    (self.ig.lines[i].a == self.index+1 or self.ig.lines[i].b == self.index+1):
+                if self.ig.lines[i].color == self.color:
+                    inLineSum += 1
+                else:
+                    outLineSum += 1
+        self.setToolTip('Point: ' + str(self.index+1) + '\nInside: ' + str(inLineSum) +
+                        '\nOutside: ' + str(outLineSum))
+        message = 'Enter in point: ' + str(self.index + 1) + \
+                  ' InLine sum: ' + str(inLineSum) + ' OutLine sum: ' + str(outLineSum)
         vLineScene.focusPoint(self.index)
         messenger.changeStatusBar(message)
 
@@ -178,10 +235,13 @@ class LineItem(QGraphicsLineItem):
         self.update()
 
     def mousePressEvent(self, *args, **kwargs):
+        self.hoverLeaveEvent(*args, **kwargs)
+        vpResultView.updateEntropy(pair=(self.a, self.b))
         self.ig.lines[self.index].display = False
         self.hide()
         self.view.update()
         vpFrontView.update()
+        vpResultView.update()
         messenger.changeStatusBar('mousePress for:%s' % self.name)
 
     def hoverEnterEvent(self, *args, **kwargs):
@@ -199,23 +259,64 @@ class LineItem(QGraphicsLineItem):
         messenger.changeStatusBar('hoverLeave for:%s' % self.name)
 
 
+# class ResultPainter(QWidget):
 class ResultPainter(QWidget):
     def __init__(self, ig, *args):
         super().__init__(*args)
         self.ig = ig
         self.entropy = None
         self.trigger = False
+        self.descLabel = None
+        self.isRemoveDots = False
+        self.isRemovePairs = False
+        self.isChangeCommunity = False
+        self.dots = []
+        self.pairs = []
         self.initUI()
 
     def initUI(self):
-        # self.setGeometry(400, 300, 280, 170)
-        # self.setMinimumSize(300, 300)
-        self.setWindowTitle('绘制点')
         self.resize(300, 500)
         self.show()
+        self.descLabel = QLabel(self)
+        self.descLabel.setGeometry(20, 380, 260, 200)
+        self.descLabel.setText("说明：\n"
+                               "    鼠标悬停在点上的时候，第一个数字表示该节点的标识，第二个数字表示该节点与社区内节点的链接数目，"
+                               "第三个数字表示该节点与其他社区节点的链接数目。"
+                               "比如：59，6，4表示节点59与社区内节点的链接数目为6，与社区间其他节点的链接数目为4。")
+        self.descLabel.setWordWrap(True)
+        self.descLabel.setAlignment(Qt.AlignTop)
+        self.descLabel.show()
         self.entropy = self.ig.network.get_entropy()
+        self.staticEntropy = self.entropy
         for i in range(len(self.entropy)):
             self.entropy[i] = float(self.entropy[i].replace('\n', ''))
+
+    def updateEntropy(self, pair=None, community=None, dot=None):
+        tempPair = None
+        tempCommunity = None
+        tempDot = None
+        if pair is not None:
+            self.isRemovePairs = True
+            self.pairs.append(pair)
+            tempPair = self.pairs
+        if dot is not None:
+            self.isRemoveDots = True
+            self.dots.append(dot)
+            tempDot = self.dots
+        if community is not None:
+            self.isChangeCommunity = True
+            tempCommunity = community
+        # 获取原始信息熵
+        if not self.isRemovePairs and not self.isRemoveDots and not self.isChangeCommunity:
+            self.dots = []
+            self.pairs = []
+            self.entropy = self.staticEntropy
+        else:
+            self.entropy = self.ig.network.get_entropy(pair=tempPair, community=tempCommunity, dot=tempDot)
+        for i in range(len(self.entropy)):
+            self.entropy[i] = float(str(self.entropy[i]).replace('\n', ''))
+        print(self.entropy)
+        self.update()
 
     def paintEvent(self, e):
         qp = QPainter()
@@ -225,7 +326,6 @@ class ResultPainter(QWidget):
 
     def triggerUpdate(self):
         self.trigger = True
-        pass
 
     def draw(self, qp):
         index = 0
@@ -238,6 +338,9 @@ class ResultPainter(QWidget):
             qp.drawText(20, index * 20 + 20, "社区%s的信息熵：%f" % (str(index + 1), self.entropy[i]))
             index += 1
         qp.drawText(15, (index + 1) * 20, "信息熵的总和：%f" % sum([i for i in self.entropy]))
+
+        # 输出说明信息
+        # qp.drawText(40, 420, "鼠标悬停在点上的时候，第一个数字表示该节点的标识，第二个数字表示该节点与社区内节点的链接数目，第三个数字表示该节点与其他社区节点的链接数目，比如：59，6，4表示节点59与社区内节点的链接数目为6，与社区间其他节点的链接数目为4")
 
         if self.trigger:
             qp.drawText(15, 200, "输出：%f" % sum([i for i in self.entropy]))
@@ -467,6 +570,10 @@ class NetworkScene(QGraphicsScene):
             self.ig.lines[i].display = True
 
         vpFrontView.update()
+        vpResultView.isRemoveDots = False
+        vpResultView.isRemovePairs = False
+        vpResultView.isChangeCommunity = False
+        vpResultView.updateEntropy()
 
     def updateScene(self):
         index = 0
@@ -537,6 +644,10 @@ class ViewPainter(QWidget):
                 y = self.ig.points[i].y
 
                 # qp.drawPoint(x, y)
+                pen = qp.pen()
+                pen.setColor(QColor(self.ig.points[i].color))
+                qp.setPen(pen)
+                qp.setRenderHint(QtGui.QPainter.Antialiasing)
                 qp.drawText(x + shift, y + shift, str(self.ig.points[i].name))
                 pos.append([x, y])
                 index += 1
@@ -626,6 +737,7 @@ class InteractGraph(QMainWindow):
         global vLineView
         global vLineScene
         global vpFrontView
+        global vpResultView
 
         # 为视图设置场景
         vLineView = NetworkView()
@@ -687,7 +799,7 @@ class InteractGraph(QMainWindow):
         colors = []
         fr = FR3DLayout()
         points = fr.outputLayout()
-        print(points)
+        # print(points)
         # Gradient = A + (B - A) * N / Step
         # colorA = (1, 0, 0)
         # colorB = (0, 0, 1)

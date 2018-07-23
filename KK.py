@@ -391,7 +391,7 @@ class KKLayout:
         maxy = max(self.positions[i][1] for i in self.positions)
         fitnessX = (self.PLOT_WIDTH - 2*margin) / (maxx + (self.PLOT_WIDTH - (maxx-minx))/2)
         fitnessY = (self.PLOT_HEIGHT - 2*margin) / (maxy + (self.PLOT_HEIGHT - (maxy-miny))/2)
-        print(fitnessX, fitnessY)
+        # print(fitnessX, fitnessY)
         for i in self.positions:
             self.positions[i][0] = (self.positions[i][0] + (self.PLOT_WIDTH - (maxx-minx))/2) * fitnessX + margin
             self.positions[i][1] = (self.positions[i][1] + (self.PLOT_HEIGHT - (maxy-miny))/2) * fitnessY + margin
@@ -413,9 +413,6 @@ class KKLayout:
                         print(i)
                         print(e)
                     break
-            if color is None:
-                print(i)
-                color = '#FFFFFFFF'
 
             f.write('"' + str(self.positionsIndex[i+1][0]*0.95) + '" "' + str(self.positionsIndex[i+1][1]*0.95) + '" "' + color +'"\n')
         f.flush()

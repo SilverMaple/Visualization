@@ -104,7 +104,7 @@ class Network():
                 if not m.isdigit():
                     continue
                 m = int(m)
-                print(m)
+                # print(m)
                 # 设置顶点颜色形状
                 self.visual_style['vertex_color'][m-1] = self.color_dict[i]
                 self.visual_style['vertex_shape'][m-1] = self.shape_dict[i]
@@ -140,23 +140,25 @@ class Network():
         plot(self.graph, 'test.png', **(self.visual_style))
         # plot(self.graph)
 
-    def get_entropy(self, pair=None, community=None):
+    def get_entropy(self, pair=None, community=None, dot=None):
         temp_edge_list = self.edges.copy()
         temp_edge_file = open(INPUT_EDGE_FILE, 'w')
         # decide to rewrite input file or not
         if pair:
-            # 分别去除每一条社区间的边，重新写入输入文件计算熵
-            print('remove ', pair)
-            if pair in temp_edge_list:
-                temp_edge_list.remove(pair)
-            else:
-                temp_edge_list.remove((pair[1], pair[0]))
-        for edge in temp_edge_list:
-            temp_edge_file.write(str(edge[0]) + ' ' + str(edge[1]) + '\n')
-        temp_edge_file.flush()
-        temp_edge_file.close()
-        print('len:', len(temp_edge_list))
-        print('len:', len(self.edges))
+            for p in pair:
+                # 分别去除每一条社区间的边，重新写入输入文件计算熵
+                print('remove ', p)
+                if p in temp_edge_list:
+                    temp_edge_list.remove(p)
+                else:
+                    temp_edge_list.remove((p[1], p[0]))
+            for edge in temp_edge_list:
+                temp_edge_file.write(str(edge[0]) + ' ' + str(edge[1]) + '\n')
+            temp_edge_file.flush()
+            temp_edge_file.close()
+            # print('len:', len(temp_edge_list))
+            # print('len:', len(self.edges))
+            # print('press Enter if necessary...')
 
         temp_community_file = open(INPUT_COMMUNITY_FILE, 'w')
         if community:
@@ -279,7 +281,7 @@ class Network():
             ws.write(current_row, 0, title, style_headline)
             current_row += 1
             for pair in pairs[1:]:
-                entropy = self.get_entropy(pair=pair)
+                entropy = self.get_entropy(pair=[pair])
                 sum_entropy = 0
                 ws.write(current_row, 0, str(pair), style_headline)
                 for i in range(len(entropy)):
