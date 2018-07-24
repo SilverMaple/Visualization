@@ -11,8 +11,8 @@ from KK import KKLayout
 import sys
 from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGraphicsScene, QGridLayout, \
-    QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel
-from PyQt5.QtGui import QPainter, QPen, QColor
+    QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel, QAction
+from PyQt5.QtGui import QPainter, QPen, QColor, QCursor
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph.opengl as gl
@@ -60,6 +60,21 @@ class Messenger:
 
 messenger = Messenger()
 
+class ActionButton(QPushButton):
+    def __init__(self, ci, index, ofCommunity,  *__args):
+        super().__init__(*__args)
+        self.ci = ci
+        self.index = index
+        self.ofCommunity = ofCommunity
+
+    def mousePressEvent(self, event):
+        ci = self.ci
+        print('changeCommunity: ', ci)
+        if ci == self.ofCommunity:
+            return
+        else:
+            tempCommunity = {'index': self.index, 'from': self.ofCommunity, 'to': ci}
+            vpResultView.updateEntropy(community=tempCommunity)
 
 class PointButton(QPushButton):
     def __init__(self, ig, index, color, *args):
@@ -92,6 +107,53 @@ class PointButton(QPushButton):
         self.index = index
         self.x = self.ig.points[index].x
         self.y = self.ig.points[index].y
+        self.ofCommunity = None
+        for ci in range(len(self.ig.network.communities)):
+            if index+1 in self.ig.network.communities[ci].vertexes:
+                self.ofCommunity = ci
+                break
+        self.setContextMenuPolicy(Qt.ActionsContextMenu)
+        # self.customContextMenuRequested.connect(self.showContextMenu)
+        self.contextMenu = QMenu(self)
+        # self.contextMenu.addSection()
+        # self.communityMenu = self.contextMenu.addMenu('移动至社区')
+        for ci in range(len(self.ig.network.communities)):
+            tempAction = self.contextMenu.addAction("社区%d"%(ci+1))
+            # tempAction = self.contextMenu.addSection("社区%d"%(ci+1))
+            # tempAction = ActionButton(ci, self.index, self.ofCommunity, "社区%d"%(ci+1))
+            # tempAction.setText("社区%d"%(ci+1))
+            tempAction.triggered.connect(lambda: self.changeCommunity(ci))
+
+    def changeCommunity(self, ci):
+        print('changeCommunity: ', ci)
+        if ci == self.ofCommunity:
+            return
+        else:
+            # tempCommunity = []
+            # for index in range(len(self.ig.network.communities)):
+            #     tempCommunity.append([])
+            #     if index != ci and index != self.ofCommunity:
+            #         tempCommunity[index] = '  '.join(self.ig.network.communities[index].vertexes)
+            #     elif index == ci:
+            #
+            #     elif index == self.ofCommunity:
+            #
+            #     else:
+            #         pass
+            #     index += 1
+            tempCommunity = {'index': self.index, 'from': self.ofCommunity, 'to': ci}
+            vpResultView.updateEntropy(community=tempCommunity)
+
+
+    def showContextMenu(self, pos):
+        '''''
+        右键点击时调用的函数
+        '''
+        # self.count += 1
+        # 菜单显示前，将它移动到鼠标点击的位置
+        self.contextMenu.exec_(QCursor.pos())  # 在鼠标位置显示
+        print('show menu')
+        # self.contextMenu.show()
 
     def restore(self):
         self.resize(10, 10)
@@ -122,37 +184,41 @@ class PointButton(QPushButton):
         messenger.changeStatusBar(message)
 
     def mousePressEvent(self, event):
-        self.setStyleSheet(('''
-        QPushButton{
-        background-color: %s ;
-        border-style: outset;
-        border-width: 1px;
-        border-radius: 5px;
-        border-color: black;
-        font: 1px;
-        padding: 0px;
-        }
-        QPushButton:hover {
-        background-color: %s;
-        border-style: inset;
-        }
-        QPushButton:pressed {
-        background-color: rgb(224, 0, 0);
-        border-style: inset;
-        }
-        QPushButton#cancel{
-            background-color: red ;
-        }
-        ''') % (self.color, self.color))
-        self.leaveEvent(event)
-        message = 'press at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
-        # print('press at point[ ', self.text(), ' ]: ', event.pos().x(), event.pos().y())
-        self.ig.points[self.index].display = False
-        self.hide()
-        vLineScene.leavePoint()
-        vLineScene.updateScene()
-        vpFrontView.update()
-        messenger.changeStatusBar(message)
+        if Qt.LeftButton == event.button():
+            self.setStyleSheet(('''
+            QPushButton{
+            background-color: %s ;
+            border-style: outset;
+            border-width: 1px;
+            border-radius: 5px;
+            border-color: black;
+            font: 1px;
+            padding: 0px;
+            }
+            QPushButton:hover {
+            background-color: %s;
+            border-style: inset;
+            }
+            QPushButton:pressed {
+            background-color: rgb(224, 0, 0);
+            border-style: inset;
+            }
+            QPushButton#cancel{
+                background-color: red ;
+            }
+            ''') % (self.color, self.color))
+            self.leaveEvent(event)
+            vpResultView.updateEntropy(dot=self.index)
+            message = 'press at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
+            # print('press at point[ ', self.text(), ' ]: ', event.pos().x(), event.pos().y())
+            self.ig.points[self.index].display = False
+            self.hide()
+            vLineScene.leavePoint()
+            vLineScene.updateScene()
+            vpFrontView.update()
+            messenger.changeStatusBar(message)
+        elif Qt.RightButton == event.button():
+            self.showContextMenu(event.pos())
 
     def enterEvent(self, *args, **kwargs):
         self.setStyleSheet(('''
@@ -210,12 +276,14 @@ class LineItem(QGraphicsLineItem):
         self.b = self.ig.lines[index].b
         self.name = '-'.join([str(self.a), str(self.b)])
         self.color = color
+        self.width = 1
         self.setZValue(-1)
         # 设置画笔
         pen = self.pen()
         p = QPen()
         pen.setColor(QColor(self.color))
-        pen.setWidth(1)
+        # print(self.color, self.width)
+        pen.setWidth(self.width)
         self.setPen(pen)
         self.setAcceptHoverEvents(True)
         self.setAcceptTouchEvents(True)
@@ -230,7 +298,7 @@ class LineItem(QGraphicsLineItem):
     def restore(self):
         self.setOpacity(1)
         pen = self.pen()
-        pen.setWidth(1)
+        pen.setWidth(self.width)
         self.setPen(pen)
         self.update()
 
@@ -272,11 +340,13 @@ class ResultPainter(QWidget):
         self.isChangeCommunity = False
         self.dots = []
         self.pairs = []
+        self.changeSets = []
+        self.communities = []
         self.initUI()
 
     def initUI(self):
         self.resize(300, 500)
-        self.show()
+        self.hide()
         self.descLabel = QLabel(self)
         self.descLabel.setGeometry(20, 380, 260, 200)
         self.descLabel.setText("说明：\n"
@@ -295,22 +365,83 @@ class ResultPainter(QWidget):
         tempPair = None
         tempCommunity = None
         tempDot = None
+
+        # 删除边
         if pair is not None:
             self.isRemovePairs = True
             self.pairs.append(pair)
             tempPair = self.pairs
+            if self.dots != []:
+                tempDot = self.dots
+        # 删除点和与其相连的边
         if dot is not None:
+            dot += 1
             self.isRemoveDots = True
+            for i in self.ig.lines:
+                if dot == i.a or dot == i.b:
+                    self.pairs.append((i.a, i.b))
+            tempPair = self.pairs
             self.dots.append(dot)
             tempDot = self.dots
+
+        # 删除点需重写社区划分信息
+        if tempDot is not None:
+            index = 0
+            self.communities = []
+            for c in self.ig.network.communities:
+                self.communities.append([])
+                for v in c.vertexes:
+                    if v not in tempDot:
+                        self.communities[index].append(v)
+                    else:
+                        print('remove: ', v)
+                index += 1
+            # remove empty array
+            while [] in self.communities:
+                self.communities.remove([])
+            tempCommunity = []
+            for c in self.communities:
+                tempCommunity.append('  '.join([str(i) for i in c]))
+            if tempCommunity == []:
+                tempCommunity = None
+
         if community is not None:
             self.isChangeCommunity = True
-            tempCommunity = community
+            self.changeSets.append(community)
+            fromIndex = []
+            toIndex = []
+            pointIndex = []
+            for c in self.changeSets:
+                fromIndex.append(c['from'])
+                toIndex.append(c['to'])
+                pointIndex.append(c['index'])
+            # 如果未修改过社区划分信息，则重新赋值
+            if self.communities == []:
+                index = 0
+                for c in self.ig.network.communities:
+                    self.communities.append([])
+                    for v in c.vertexes:
+                        self.communities[index].append(v)
+                    index += 1
+            for index in range(len(pointIndex)):
+                print('move point %d from community %d to community %d'
+                      % (fromIndex[index], toIndex[index], pointIndex[index]+1))
+                self.communities[fromIndex[index]].remove(pointIndex[index]+1)
+                self.communities[toIndex[index]].append(pointIndex[index]+1)
+
+
+        print('tempPair', tempPair)
+        print('tempDot', tempDot)
+        print('tempCommunity', tempCommunity)
+
         # 获取原始信息熵
         if not self.isRemovePairs and not self.isRemoveDots and not self.isChangeCommunity:
             self.dots = []
             self.pairs = []
+            self.changeSets = []
+            self.communities = []
             self.entropy = self.staticEntropy
+            self.entropy = self.ig.network.get_entropy()
         else:
             self.entropy = self.ig.network.get_entropy(pair=tempPair, community=tempCommunity, dot=tempDot)
         for i in range(len(self.entropy)):
@@ -335,12 +466,10 @@ class ResultPainter(QWidget):
             qp.drawText(5, index * 20 + 20, "●")
             pen = QPen(QtCore.Qt.black, 1, QtCore.Qt.SolidLine)
             qp.setPen(pen)
-            qp.drawText(20, index * 20 + 20, "社区%s的信息熵：%f" % (str(index + 1), self.entropy[i]))
+            qp.drawText(20, index * 20 + 20,
+                        '{:<10}{}'.format('社区%d的信息熵：'%(index + 1), '%.6f'%(self.entropy[i])))
             index += 1
-        qp.drawText(15, (index + 1) * 20, "信息熵的总和：%f" % sum([i for i in self.entropy]))
-
-        # 输出说明信息
-        # qp.drawText(40, 420, "鼠标悬停在点上的时候，第一个数字表示该节点的标识，第二个数字表示该节点与社区内节点的链接数目，第三个数字表示该节点与其他社区节点的链接数目，比如：59，6，4表示节点59与社区内节点的链接数目为6，与社区间其他节点的链接数目为4")
+        qp.drawText(20, (index + 1) * 20, '{:<10}{}'.format('信息熵的总和：', '%.6f'%(sum([i for i in self.entropy]))))
 
         if self.trigger:
             qp.drawText(15, 200, "输出：%f" % sum([i for i in self.entropy]))
@@ -622,7 +751,7 @@ class ViewPainter(QWidget):
     def initUI(self):
         self.setWindowTitle('绘制点')
         self.resize(500, 500)
-        self.show()
+        # self.show()
 
     def paintEvent(self, e):
         qp = QPainter()
@@ -702,6 +831,7 @@ class InteractGraph(QMainWindow):
         self.network.set_community_member()
 
     def initUI(self):
+        self.hide()
         self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         self.setWindowTitle("程序主窗口")
 
@@ -717,7 +847,7 @@ class InteractGraph(QMainWindow):
         self.menuBar().addMenu(self.file_menu)
 
         self.menuBar().addSeparator()
-        self.menuBar().addAction('&打开', self.loadData)
+        self.menuBar().addAction('&3D图显示/关闭', self.change3DViewState)
         self.menuBar().addSeparator()
         # self.menuBar().addAction('&重新布局', self.reloadLayout)
         self.layout_menu = QMenu('&布局选择', self)
@@ -751,9 +881,11 @@ class InteractGraph(QMainWindow):
 
         vpFrontView = ViewPainter(self)
         vpResultView = ResultPainter(self)
-        v3DView = self.get3DView()
+        v3DView = None
+        # v3DView = self.get3DView()
+        self.v3DView = v3DView
         # v3DView.setAutoBufferSwap(False)
-        v3DView.show()
+        # v3DView.show()
 
         self.vpViews = [vpFrontView, vpResultView, vLineView]
         # self.vpViews = [vpFrontView, vLineView]
@@ -787,11 +919,12 @@ class InteractGraph(QMainWindow):
         self.statusBar().showMessage("就绪")
         messenger.setup(self.statusBar())
         self.center()
+        vpResultView.show()
 
     def get3DView(self):
         w = gl.GLViewWidget()
         w.opts['distance'] = 20
-        w.show()
+        w.hide()
         w.setWindowTitle('Network 3D Graph')
 
         g = gl.GLGridItem()
@@ -824,6 +957,7 @@ class InteractGraph(QMainWindow):
 
         sp1 = gl.GLScatterPlotItem(pos=pos, size=size, color=color, pxMode=False)
         sp1.translate(5, 5, 0)
+        # sp1.scale(10, 10, 10)
 
         for i in range(len(self.lines)):
             x = [pos[self.lines[i].a-1][0], pos[self.lines[i].b-1][0]]
@@ -838,10 +972,34 @@ class InteractGraph(QMainWindow):
             pts = np.vstack([x, y, z]).transpose()
             plt = gl.GLLinePlotItem(pos=pts, color=tmp, width=.5, antialias=True)
             plt.translate(5, 5, 0)
+            # plt.scale(10, 10, 10)
             w.addItem(plt)
 
         w.addItem(sp1)
         return w
+
+    def change3DViewState(self):
+        if self.v3DView is None:
+            message = '3D视图创建中...'
+            messenger.changeStatusBar(message)
+            v3DView = self.get3DView()
+            self.v3DView = v3DView
+            self.v3DView.show()
+            return
+            # 不支持再其他线程生成QOpenGLContext
+            # try:
+            #     _start_new_thread(self.get3DView, (self,))
+            # except Exception as e:
+            #     print("Error: unable to start thread")
+            #     message = '创建3D视图失败！'
+            #     messenger.changeStatusBar(message)
+            #     print(e)
+            # return
+        if self.v3DView.isVisible():
+            self.v3DView.hide()
+        else:
+            self.v3DView.resize(400, 400)
+            self.v3DView.show()
 
     def center(self):  # 主窗口居中显示函数
         screen = QtGui.QDesktopWidget().screenGeometry()
@@ -859,7 +1017,7 @@ class InteractGraph(QMainWindow):
         if self.layoutSelection is 'FR':
             message = 'Fruchterman-Reingold重新布局中...'
             messenger.changeStatusBar(message)
-            # 创建两个线程
+            # 创建线程
             try:
                 _start_new_thread(self.reloadLayoutThread, (self,))
             except Exception as e:
@@ -870,7 +1028,7 @@ class InteractGraph(QMainWindow):
         elif self.layoutSelection is 'KK':
             message = 'Kamada-Kawai重新布局中...'
             messenger.changeStatusBar(message)
-            # 创建两个线程
+            # 创建线程
             try:
                 _start_new_thread(self.reloadLayoutThread, (self,))
             except Exception as e:
@@ -936,7 +1094,7 @@ class InteractGraph(QMainWindow):
         self.fileQuit()
 
     def readPoint(self):
-        pointsLines = open('../R_script/points.txt').readlines()
+        pointsLines = open('points.txt').readlines()
         self.points = []
         self.colors = []
         for line in pointsLines:
@@ -950,7 +1108,7 @@ class InteractGraph(QMainWindow):
                 print(e)
 
     def readLine(self):
-        lineLines = open('../R_script/lines.txt').readlines()
+        lineLines = open('lines.txt').readlines()
         self.lines = []
         for line in lineLines:
             try:

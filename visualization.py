@@ -75,6 +75,7 @@ class Network():
     # 4 1
     # ...
     def import_network_information(self):
+        print('{:<30}\t{:<20}'.format('Reading network file: \t', NETWORK_FILE))
         lines = open(NETWORK_FILE, 'r').readlines()
         self.graph.add_vertices(VERTEXES_COUNT)
         self.vertexes = [i+1 for i in range(VERTEXES_COUNT)]
@@ -85,14 +86,15 @@ class Network():
             self.graph.add_edges([(a-1, b-1)])
             self.edges.append((a, b))
         self.graph.vs['name'] = [str(i+1) for i in range(self.graph.vcount())]
-        print('---------')
-        print(self.edges)
+        # print('---------')
+        # print(self.edges)
 
     # 从文件中导入社区信息，每一行表示一个社区信息，社区名字与具体成员以英文冒号分隔，成员之间以空格分隔，格式如下所示：
     # 社区1:1 2 4 5 6 7 8 11 12 13 14 17 18 20 22
     # 社区2:3 9 10 15 16 19 21 23 24 25 26 27 28 29 30
     # ...
     def set_community_member(self):
+        print('{:<30}\t{:<20}'.format('Reading community file:', COMMUNITY_FILE))
         lines = open(COMMUNITY_FILE, 'r', encoding='utf-8').readlines()
         self.communities = [Community() for i in range(len(lines))]
         for i in range(len(lines)):
@@ -150,15 +152,18 @@ class Network():
                 print('remove ', p)
                 if p in temp_edge_list:
                     temp_edge_list.remove(p)
-                else:
+                elif (p[1], p[0]) in temp_edge_list:
                     temp_edge_list.remove((p[1], p[0]))
-            for edge in temp_edge_list:
-                temp_edge_file.write(str(edge[0]) + ' ' + str(edge[1]) + '\n')
-            temp_edge_file.flush()
-            temp_edge_file.close()
-            # print('len:', len(temp_edge_list))
-            # print('len:', len(self.edges))
-            # print('press Enter if necessary...')
+                else:
+                    pass
+                    # print('Attempt to remove a line that already removed: ', str(p))
+        for edge in temp_edge_list:
+            temp_edge_file.write(str(edge[0]) + ' ' + str(edge[1]) + '\n')
+        temp_edge_file.flush()
+        temp_edge_file.close()
+        # print('len:', len(temp_edge_list))
+        # print('len:', len(self.edges))
+        # print('press Enter if necessary...')
 
         temp_community_file = open(INPUT_COMMUNITY_FILE, 'w')
         if community:

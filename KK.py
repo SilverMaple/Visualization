@@ -398,7 +398,7 @@ class KKLayout:
 
     def outputPoints(self):
         # "228.918895098647" "319.544170947533" "#FF0000FF"
-        f = open('../R_script/points.txt', 'w')
+        f = open('points.txt', 'w')
         cs = ['#FF0099FF', '#CC00FFFF', '#3300FFFF']
         # 转化格式
         self.positionsIndex = {i: (self.finalPos[i-1]['x'], self.finalPos[i-1]['y'])

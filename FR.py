@@ -205,7 +205,7 @@ class FRLayout():
 
     def outputPoints(self):
         # "228.918895098647" "319.544170947533" "#FF0000FF"
-        f = open('../R_script/points.txt', 'w')
+        f = open('points.txt', 'w')
         cs = ['#FF0099FF', '#CC00FFFF', '#3300FFFF']
         for i in range(len(self.positions)):
             color = None
@@ -425,8 +425,6 @@ class FR3DLayout():
 
     def outputPoints(self):
         # "228.918895098647" "319.544170947533" "#FF0000FF"
-        # f = open('../R_script/points.txt', 'w')
-        # cs = ['#FF0099FF', '#CC00FFFF', '#3300FFFF']
         return self.positions
 
     def outputLayout(self):
