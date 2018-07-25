@@ -12,7 +12,7 @@ import sys
 from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGraphicsScene, QGridLayout, \
     QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel, QAction
-from PyQt5.QtGui import QPainter, QPen, QColor, QCursor
+from PyQt5.QtGui import QPainter, QPen, QColor, QCursor, QMouseEvent
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph.opengl as gl
@@ -79,7 +79,7 @@ class ActionButton(QPushButton):
 class PointButton(QPushButton):
     def __init__(self, ig, index, color, *args):
         QPushButton.__init__(self, *args)
-        self.setMouseTracking(False)
+        self.setMouseTracking(True)
         self.setStyleSheet(('''
         QPushButton{
         background-color: %s ;
@@ -103,6 +103,7 @@ class PointButton(QPushButton):
         }
         ''') % color)
         self.color = color
+        self.changeColor = None
         self.ig = ig
         self.index = index
         self.x = self.ig.points[index].x
@@ -119,43 +120,93 @@ class PointButton(QPushButton):
         # self.communityMenu = self.contextMenu.addMenu('移动至社区')
         for ci in range(len(self.ig.network.communities)):
             tempAction = self.contextMenu.addAction("社区%d"%(ci+1))
-            # tempAction = self.contextMenu.addSection("社区%d"%(ci+1))
-            # tempAction = ActionButton(ci, self.index, self.ofCommunity, "社区%d"%(ci+1))
-            # tempAction.setText("社区%d"%(ci+1))
             tempAction.triggered.connect(lambda: self.changeCommunity(ci))
+        self.contextMenuState = False
 
     def changeCommunity(self, ci):
+        # 直接使用坐标计算选择社区，以后有修改方法后再改
+        ci = int(((QCursor.pos().y() - self.menuPos.y())-2) / 23)
         print('changeCommunity: ', ci)
         if ci == self.ofCommunity:
             return
         else:
-            # tempCommunity = []
-            # for index in range(len(self.ig.network.communities)):
-            #     tempCommunity.append([])
-            #     if index != ci and index != self.ofCommunity:
-            #         tempCommunity[index] = '  '.join(self.ig.network.communities[index].vertexes)
-            #     elif index == ci:
-            #
-            #     elif index == self.ofCommunity:
-            #
-            #     else:
-            #         pass
-            #     index += 1
+            self.changeColor = self.ig.colors[ci]
+            self.setStyleSheet(('''
+            QPushButton{
+            background-color: %s ;
+            border-style: outset;
+            border-width: 1px;
+            border-radius: 5px;
+            border-color: black;
+            font: 1px;
+            padding: 0px;
+            }
+            QPushButton:hover {
+            background-color: yellow;
+            border-style: inset;
+            }
+            QPushButton:pressed {
+            background-color: rgb(224, 0, 0);
+            border-style: inset;
+            }
+            QPushButton#cancel{
+                background-color: red ;
+            }
+            ''') % self.changeColor)
+            for line in vLineScene.lineItem:
+                anotherPoint = None
+                if line.a == self.index+1:
+                    anotherPoint = line.b
+                elif line.b == self.index+1:
+                    anotherPoint = line.a
+                else:
+                    continue
+                if self.ig.points[anotherPoint-1].color == self.changeColor:
+                    line.setColor(self.changeColor)
+                    line.changeColor = self.changeColor
+                else:
+                    line.setColor('#000000')
+                    line.changeColor = '#000000'
+
+            self.update()
             tempCommunity = {'index': self.index, 'from': self.ofCommunity, 'to': ci}
             vpResultView.updateEntropy(community=tempCommunity)
-
 
     def showContextMenu(self, pos):
         '''''
         右键点击时调用的函数
         '''
-        # self.count += 1
+        self.menuPos = QCursor.pos()
+        # print('show menu', self.menuPos)
         # 菜单显示前，将它移动到鼠标点击的位置
-        self.contextMenu.exec_(QCursor.pos())  # 在鼠标位置显示
-        print('show menu')
+        self.contextMenu.exec(QCursor.pos())  # 在鼠标位置显示
         # self.contextMenu.show()
 
-    def restore(self):
+    def restore(self, saveColor=None):
+        if not saveColor and self.changeColor:
+            self.changeColor = None
+            self.setStyleSheet(('''
+                QPushButton{
+                background-color: %s ;
+                border-style: outset;
+                border-width: 1px;
+                border-radius: 5px;
+                border-color: black;
+                font: 1px;
+                padding: 0px;
+                }
+                QPushButton:hover {
+                background-color: yellow;
+                border-style: inset;
+                }
+                QPushButton:pressed {
+                background-color: rgb(224, 0, 0);
+                border-style: inset;
+                }
+                QPushButton#cancel{
+                    background-color: red ;
+                }
+                ''') % self.color)
         self.resize(10, 10)
         self.setWindowOpacity(1)
 
@@ -221,28 +272,52 @@ class PointButton(QPushButton):
             self.showContextMenu(event.pos())
 
     def enterEvent(self, *args, **kwargs):
-        self.setStyleSheet(('''
-        QPushButton{
-        background-color: %s ;
-        border-style: outset;
-        border-width: 1px;
-        border-radius: 5px;
-        border-color: black;
-        font: 1px;
-        padding: 0px;
-        }
-        QPushButton:hover {
-        background-color: yellow;
-        border-style: inset;
-        }
-        QPushButton:pressed {
-        background-color: rgb(224, 0, 0);
-        border-style: inset;
-        }
-        QPushButton#cancel{
-            background-color: red ;
-        }
-        ''') % self.color)
+        if self.changeColor:
+            self.setStyleSheet(('''
+            QPushButton{
+            background-color: %s ;
+            border-style: outset;
+            border-width: 1px;
+            border-radius: 5px;
+            border-color: black;
+            font: 1px;
+            padding: 0px;
+            }
+            QPushButton:hover {
+            background-color: yellow;
+            border-style: inset;
+            }
+            QPushButton:pressed {
+            background-color: rgb(224, 0, 0);
+            border-style: inset;
+            }
+            QPushButton#cancel{
+                background-color: red ;
+            }
+            ''') % self.changeColor)
+        else:
+            self.setStyleSheet(('''
+            QPushButton{
+            background-color: %s ;
+            border-style: outset;
+            border-width: 1px;
+            border-radius: 5px;
+            border-color: black;
+            font: 1px;
+            padding: 0px;
+            }
+            QPushButton:hover {
+            background-color: yellow;
+            border-style: inset;
+            }
+            QPushButton:pressed {
+            background-color: rgb(224, 0, 0);
+            border-style: inset;
+            }
+            QPushButton#cancel{
+                background-color: red ;
+            }
+            ''') % self.color)
         inLineSum = 0
         outLineSum = 0
         for i in range(len(self.ig.lines)):
@@ -261,7 +336,7 @@ class PointButton(QPushButton):
 
     def leaveEvent(self, *args, **kwargs):
         message = 'Leave in point: ' + str(self.index + 1)
-        vLineScene.leavePoint()
+        vLineScene.leavePoint(saveColor=True)
         messenger.changeStatusBar(message)
 
 
@@ -276,6 +351,7 @@ class LineItem(QGraphicsLineItem):
         self.b = self.ig.lines[index].b
         self.name = '-'.join([str(self.a), str(self.b)])
         self.color = color
+        self.changeColor = None
         self.width = 1
         self.setZValue(-1)
         # 设置画笔
@@ -289,15 +365,25 @@ class LineItem(QGraphicsLineItem):
         self.setAcceptTouchEvents(True)
         self.setToolTip(self.name)
 
+    def setColor(self, color):
+        pen = self.pen()
+        p = QPen()
+        pen.setColor(QColor(color))
+        self.setPen(pen)
+        self.update()
+
     def focus(self):
         pen = self.pen()
         pen.setWidth(2)
         self.setPen(pen)
         self.update()
 
-    def restore(self):
+    def restore(self, saveColor=None):
         self.setOpacity(1)
         pen = self.pen()
+        if not saveColor:
+            self.changeColor = None
+            pen.setColor(QColor(self.color))
         pen.setWidth(self.width)
         self.setPen(pen)
         self.update()
@@ -321,7 +407,10 @@ class LineItem(QGraphicsLineItem):
 
     def hoverLeaveEvent(self, *args, **kwargs):
         pen = self.pen()
-        pen.setColor(QColor(self.color))
+        if self.changeColor:
+            pen.setColor(QColor(self.changeColor))
+        else:
+            pen.setColor(QColor(self.color))
         self.setPen(pen)
         self.view.update()
         messenger.changeStatusBar('hoverLeave for:%s' % self.name)
@@ -365,6 +454,7 @@ class ResultPainter(QWidget):
         tempPair = None
         tempCommunity = None
         tempDot = None
+        print('----------------Update entropy----------------')
 
         # 删除边
         if pair is not None:
@@ -384,18 +474,47 @@ class ResultPainter(QWidget):
             self.dots.append(dot)
             tempDot = self.dots
 
+        self.communities = []
         # 删除点需重写社区划分信息
         if tempDot is not None:
             index = 0
-            self.communities = []
-            for c in self.ig.network.communities:
-                self.communities.append([])
-                for v in c.vertexes:
-                    if v not in tempDot:
-                        self.communities[index].append(v)
-                    else:
-                        print('remove: ', v)
-                index += 1
+            # self.communities = []
+            if self.isChangeCommunity and community is None:
+                fromIndex = []
+                toIndex = []
+                pointIndex = []
+                for c in self.changeSets:
+                    fromIndex.append(c['from'])
+                    toIndex.append(c['to'])
+                    pointIndex.append(c['index'])
+                # 如果未修改过社区划分信息，则重新赋值
+                if self.communities == []:
+                    index = 0
+                    for c in self.ig.network.communities:
+                        self.communities.append([])
+                        for v in c.vertexes:
+                            self.communities[index].append(v)
+                        index += 1
+                for index in range(len(pointIndex)):
+                    print('move point %d from community %d to community %d'
+                          % (pointIndex[index] + 1, fromIndex[index], toIndex[index]))
+                    self.communities[fromIndex[index]].remove(pointIndex[index] + 1)
+                    self.communities[toIndex[index]].append(pointIndex[index] + 1)
+                for j in range(len(self.communities)):
+                    for v in self.communities[j]:
+                        if v in tempDot:
+                            self.communities[j].remove(v)
+                            print('remove point: ', v)
+                    index += 1
+            else:
+                for c in self.ig.network.communities:
+                    self.communities.append([])
+                    for v in c.vertexes:
+                        if v not in tempDot:
+                            self.communities[index].append(v)
+                        else:
+                            print('remove point: ', v)
+                    index += 1
             # remove empty array
             while [] in self.communities:
                 self.communities.remove([])
@@ -406,7 +525,22 @@ class ResultPainter(QWidget):
                 tempCommunity = None
 
         if community is not None:
+            if pair is None and self.pairs != []:
+                tempPair = self.pairs
+            if dot is None and self.dots != []:
+                for i in self.dots:
+                    print('remove point:', i)
             self.isChangeCommunity = True
+            # 注意同一个点不应该重复移动
+            removeItem = None
+            for i in self.changeSets:
+                print(i['index'], community['index'])
+                if i['index'] == community['index']:
+                    removeItem = i
+                    break
+            if removeItem is not None:
+                # print('remove duplicate item')
+                self.changeSets.remove(removeItem)
             self.changeSets.append(community)
             fromIndex = []
             toIndex = []
@@ -417,22 +551,29 @@ class ResultPainter(QWidget):
                 pointIndex.append(c['index'])
             # 如果未修改过社区划分信息，则重新赋值
             if self.communities == []:
+                print('here')
                 index = 0
                 for c in self.ig.network.communities:
                     self.communities.append([])
                     for v in c.vertexes:
-                        self.communities[index].append(v)
+                        if self.dots == [] or self.dots != [] and v not in self.dots:
+                            self.communities[index].append(v)
                     index += 1
             for index in range(len(pointIndex)):
+                if self.dots != [] and pointIndex[index]+1 in self.dots:
+                    continue
                 print('move point %d from community %d to community %d'
-                      % (fromIndex[index], toIndex[index], pointIndex[index]+1))
+                      % (pointIndex[index]+1, fromIndex[index], toIndex[index]))
                 self.communities[fromIndex[index]].remove(pointIndex[index]+1)
                 self.communities[toIndex[index]].append(pointIndex[index]+1)
+            tempCommunity = []
+            for c in self.communities:
+                tempCommunity.append('  '.join([str(i) for i in c]))
 
 
-        print('tempPair', tempPair)
-        print('tempDot', tempDot)
-        print('tempCommunity', tempCommunity)
+        # print('tempPair', tempPair)
+        # print('tempDot', tempDot)
+        # print('tempCommunity', tempCommunity)
 
         # 获取原始信息熵
         if not self.isRemovePairs and not self.isRemoveDots and not self.isChangeCommunity:
@@ -446,7 +587,7 @@ class ResultPainter(QWidget):
             self.entropy = self.ig.network.get_entropy(pair=tempPair, community=tempCommunity, dot=tempDot)
         for i in range(len(self.entropy)):
             self.entropy[i] = float(str(self.entropy[i]).replace('\n', ''))
-        print(self.entropy)
+        print(['社区%d:  %f'%(i+1, self.entropy[i]) for i in range(len(self.entropy))])
         self.update()
 
     def paintEvent(self, e):
@@ -677,15 +818,21 @@ class NetworkScene(QGraphicsScene):
                 line.setOpacity(1)
                 line.focus()
             else:
-                line.restore()
+                line.restore(saveColor=True)
                 line.setOpacity(.3)
 
-    def leavePoint(self):
-        for i in range(len(self.buttons)):
-            self.buttons[i].restore()
+    def leavePoint(self, saveColor=None):
+        if saveColor:
+            for i in range(len(self.buttons)):
+                self.buttons[i].restore(saveColor=saveColor)
+            for i in range(len(self.lineItem)):
+                self.lineItem[i].restore(saveColor=saveColor)
+        else:
+            for i in range(len(self.buttons)):
+                self.buttons[i].restore()
 
-        for i in range(len(self.lineItem)):
-            self.lineItem[i].restore()
+            for i in range(len(self.lineItem)):
+                self.lineItem[i].restore()
 
     def restoreScene(self):
         for i in range(len(self.buttons)):
@@ -920,6 +1067,9 @@ class InteractGraph(QMainWindow):
         messenger.setup(self.statusBar())
         self.center()
         vpResultView.show()
+
+    def getCurrentCursorPos(self):
+        return vLineView.mapToScene(self.cursor().pos())
 
     def get3DView(self):
         w = gl.GLViewWidget()
