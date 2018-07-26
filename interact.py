@@ -9,7 +9,7 @@ from visualization import Network
 from FR import FRLayout, FR3DLayout
 from KK import KKLayout
 import sys
-from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint
+from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint, QThread, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGraphicsScene, QGridLayout, \
     QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel, QAction
 from PyQt5.QtGui import QPainter, QPen, QColor, QCursor, QMouseEvent
@@ -1071,9 +1071,9 @@ class InteractGraph(QMainWindow):
     def getCurrentCursorPos(self):
         return vLineView.mapToScene(self.cursor().pos())
 
-    def get3DView(self):
+    def get3DView(self, dynamic=None):
         w = gl.GLViewWidget()
-        w.opts['distance'] = 20
+        w.opts['distance'] = 10
         w.hide()
         w.setWindowTitle('Network 3D Graph')
 
@@ -1081,7 +1081,11 @@ class InteractGraph(QMainWindow):
         w.addItem(g)
         colors = []
         fr = FR3DLayout()
-        points = fr.outputLayout()
+        if dynamic is None:
+            points = fr.outputLayout()
+        else:
+            self.dynamicPoints = fr.outputLayout(dynamic=dynamic)
+            points = self.dynamicPoints[0]
         # print(points)
         # Gradient = A + (B - A) * N / Step
         # colorA = (1, 0, 0)
@@ -1105,10 +1109,12 @@ class InteractGraph(QMainWindow):
             color[i] = colors[self.colors.index(self.points[i].color)]
             # print(color[i])
 
-        sp1 = gl.GLScatterPlotItem(pos=pos, size=size, color=color, pxMode=False)
-        sp1.translate(5, 5, 0)
+        self.scatterPlotPos = pos
+        self.scatterPlot = gl.GLScatterPlotItem(pos=pos, size=size, color=color, pxMode=False)
+        self.scatterPlot.translate(5, 5, 0)
         # sp1.scale(10, 10, 10)
 
+        self.linePlot = []
         for i in range(len(self.lines)):
             x = [pos[self.lines[i].a-1][0], pos[self.lines[i].b-1][0]]
             y = [pos[self.lines[i].a-1][1], pos[self.lines[i].b-1][1]]
@@ -1124,19 +1130,50 @@ class InteractGraph(QMainWindow):
             plt.translate(5, 5, 0)
             # plt.scale(10, 10, 10)
             w.addItem(plt)
+            self.linePlot.append(plt)
 
-        w.addItem(sp1)
+        w.addItem(self.scatterPlot)
+        self.v3DView = w
+        if dynamic:
+            # 显示动态过程
+            self.dynamicPointsIndex = 0
+            self.timer = QtCore.QTimer()
+            self.timer.timeout.connect(self.update)
+            self.timer.start(100)
+            print('start timer')
         return w
+        # p4.setData(z=z[index % z.shape[0]])
+
+    def update(self):
+        if self.dynamicPointsIndex >= len(self.dynamicPoints):
+            self.dynamicPointsIndex = 0
+        sizes = []
+        for i in range(len(self.scatterPlotPos)):
+            self.scatterPlotPos[i] = ((self.dynamicPoints[self.dynamicPointsIndex][i+1][0]- 1700)/300.0,
+                                      (self.dynamicPoints[self.dynamicPointsIndex][i+1][1]- 1700)/300.0,
+                                       (self.dynamicPoints[self.dynamicPointsIndex][i+1][2]- 200)/300.0)
+            sizes.append(0.05)
+        self.scatterPlot.setData(pos=self.scatterPlotPos)
+        self.scatterPlot.setData(size=sizes)
+
+        for i in range(len(self.lines)):
+            x = [self.scatterPlotPos[self.lines[i].a-1][0], self.scatterPlotPos[self.lines[i].b-1][0]]
+            y = [self.scatterPlotPos[self.lines[i].a-1][1], self.scatterPlotPos[self.lines[i].b-1][1]]
+            z = [self.scatterPlotPos[self.lines[i].a-1][2], self.scatterPlotPos[self.lines[i].b-1][2]]
+            pts = np.vstack([x, y, z]).transpose()
+            self.linePlot[i].setData(pos=pts)
+
+        self.dynamicPointsIndex += 1
 
     def change3DViewState(self):
         if self.v3DView is None:
             message = '3D视图创建中...'
             messenger.changeStatusBar(message)
-            v3DView = self.get3DView()
+            v3DView = self.get3DView(dynamic=True)
             self.v3DView = v3DView
             self.v3DView.show()
             return
-            # 不支持再其他线程生成QOpenGLContext
+            # 不支持在其他线程生成QOpenGLContext
             # try:
             #     _start_new_thread(self.get3DView, (self,))
             # except Exception as e:
@@ -1147,9 +1184,11 @@ class InteractGraph(QMainWindow):
             # return
         if self.v3DView.isVisible():
             self.v3DView.hide()
+            self.timer.stop()
         else:
             self.v3DView.resize(400, 400)
             self.v3DView.show()
+            self.timer.start()
 
     def center(self):  # 主窗口居中显示函数
         screen = QtGui.QDesktopWidget().screenGeometry()
@@ -1279,7 +1318,6 @@ class InteractGraph(QMainWindow):
         print("Lines Length: ", len(self.lines))
         for l in self.lines:
             print("Lines:", ' '.join([str(l.a), str(l.b), str(l.color_index), l.color]))
-
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

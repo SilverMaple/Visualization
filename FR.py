@@ -339,13 +339,18 @@ class FR3DLayout():
         self.temperature = self.cool()
         # print(self.temperature)
 
-    def runFR(self):
+    def runFR(self, dynamic=None):
         self.init_vertices()
+        self.dynamicPositions.append(self.positions)
         for i in range(0, self.iterations):
             print('Fruchterman-Reingold V=%d(%d) IT: %d' % (len(self.vertexes), (len(self.vertexes)), i))
             if self.temperature < 0.02:
                 break
             self.algorithm_step()
+            if dynamic:
+                # self.normalizeScope()
+                temp = self.positions.copy()
+                self.dynamicPositions.append(temp)
 
     def get_vertexes_count(self):
         global VERTEXES_COUNT
@@ -423,11 +428,15 @@ class FR3DLayout():
             self.positions[i][1] = (self.positions[i][1] + (self.PLOT_HEIGHT - (maxy-miny))/2) * fitnessY + margin
             self.positions[i][2] = (self.positions[i][2] + (self.PLOT_DEPTH - (maxz-minz))/2) * fitnessZ + margin
 
-    def outputPoints(self):
+    def outputPoints(self, dynamic=None):
         # "228.918895098647" "319.544170947533" "#FF0000FF"
-        return self.positions
+        if dynamic is None:
+            return self.positions
+        else:
+            return self.dynamicPositions
 
-    def outputLayout(self):
+    def outputLayout(self, dynamic=None):
+        self.dynamicPositions = []
         win_unicode_console.enable()
         print('Reading file....')
         self.setAttribute(100, 2000, 30, 100, 100)
@@ -435,9 +444,10 @@ class FR3DLayout():
         #             temperature=100, speed=10)
         self.import_network_information()
         self.set_community_member()
-        self.runFR()
-        self.normalizeScope()
-        return self.outputPoints()
+        self.runFR(dynamic=dynamic)
+        if dynamic is None:
+            self.normalizeScope()
+        return self.outputPoints(dynamic=dynamic)
 
 if __name__ == '__main__':
     win_unicode_console.enable()
