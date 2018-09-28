@@ -11,8 +11,8 @@ from KK import KKLayout
 import sys
 from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint, QThread, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGraphicsScene, QGridLayout, \
-    QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel, QAction
-from PyQt5.QtGui import QPainter, QPen, QColor, QCursor, QMouseEvent
+    QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel, QAction, QShortcut, QInputDialog, QLineEdit
+from PyQt5.QtGui import QPainter, QPen, QColor, QCursor, QMouseEvent, QIcon, QKeySequence
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph.opengl as gl
@@ -21,6 +21,7 @@ import numpy as np
 POINT_SIZE = 10
 APP_WIDTH = 1320
 APP_HEIGHT = 500
+ICON_PATH = 'c_plus/select.ico'
 
 
 class Point:
@@ -60,6 +61,7 @@ class Messenger:
 
 messenger = Messenger()
 
+
 class ActionButton(QPushButton):
     def __init__(self, ci, index, ofCommunity,  *__args):
         super().__init__(*__args)
@@ -75,6 +77,7 @@ class ActionButton(QPushButton):
         else:
             tempCommunity = {'index': self.index, 'from': self.ofCommunity, 'to': ci}
             vpResultView.updateEntropy(community=tempCommunity)
+
 
 class PointButton(QPushButton):
     def __init__(self, ig, index, color, *args):
@@ -108,28 +111,38 @@ class PointButton(QPushButton):
         self.index = index
         self.x = self.ig.points[index].x
         self.y = self.ig.points[index].y
+        self.dragging = False
         self.ofCommunity = None
         for ci in range(len(self.ig.network.communities)):
             if index+1 in self.ig.network.communities[ci].vertexes:
                 self.ofCommunity = ci
                 break
+        self.selectedCommunity = self.ofCommunity
         self.setContextMenuPolicy(Qt.ActionsContextMenu)
         # self.customContextMenuRequested.connect(self.showContextMenu)
         self.contextMenu = QMenu(self)
         # self.contextMenu.addSection()
         # self.communityMenu = self.contextMenu.addMenu('移动至社区')
         for ci in range(len(self.ig.network.communities)):
-            tempAction = self.contextMenu.addAction("社区%d"%(ci+1))
+            tempAction = self.contextMenu.addAction("社区%d" % (ci+1))
             tempAction.triggered.connect(lambda: self.changeCommunity(ci))
         self.contextMenuState = False
 
     def changeCommunity(self, ci):
         # 直接使用坐标计算选择社区，以后有修改方法后再改
         ci = int(((QCursor.pos().y() - self.menuPos.y())-2) / 23)
-        print('changeCommunity: ', ci)
-        if ci == self.ofCommunity:
+        if ci == self.selectedCommunity:
             return
+        # elif ci == self.ofCommunity:
+        #     self.changeColor = None
+        #     self.restore()
+        #     self.ig.points[self.index].display = True
+        #     self.update()
+        #     print('here')
+        #     tempCommunity = {'index': self.index, 'from': self.ofCommunity, 'to': ci}
+        #     vpResultView.updateEntropy(community=tempCommunity)
         else:
+            self.selectedCommunity = ci
             self.changeColor = self.ig.colors[ci]
             self.setStyleSheet(('''
             QPushButton{
@@ -167,18 +180,23 @@ class PointButton(QPushButton):
                 else:
                     line.setColor('#000000')
                     line.changeColor = '#000000'
-
+            if ci == self.ofCommunity:
+                self.changeColor = None
             self.update()
             tempCommunity = {'index': self.index, 'from': self.ofCommunity, 'to': ci}
             vpResultView.updateEntropy(community=tempCommunity)
 
     def showContextMenu(self, pos):
-        '''''
-        右键点击时调用的函数
-        '''
         self.menuPos = QCursor.pos()
-        # print('show menu', self.menuPos)
         # 菜单显示前，将它移动到鼠标点击的位置
+        for i in range(len(self.contextMenu.actions())):
+            if self.selectedCommunity == i:
+                self.contextMenu.actions()[i].setIconText('✔')
+                self.contextMenu.actions()[i].setIcon(QIcon(ICON_PATH))
+                self.contextMenu.actions()[i].setIconVisibleInMenu(True)
+            else:
+                self.contextMenu.actions()[i].setIconText('')
+                self.contextMenu.actions()[i].setIconVisibleInMenu(False)
         self.contextMenu.exec(QCursor.pos())  # 在鼠标位置显示
         # self.contextMenu.show()
 
@@ -211,8 +229,25 @@ class PointButton(QPushButton):
         self.setWindowOpacity(1)
 
     def mouseMoveEvent(self, event):
-        message = 'move event at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
-        # messenger.changeStatusBar(message)
+        if self.dragging:
+            message = 'move event at point[ ' + str(self.index+1) + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
+            x = self.pos().x() + event.pos().x()
+            y = self.pos().y() + event.pos().y()
+            self.ig.points[self.index].x = x
+            self.ig.points[self.index].y = y
+            self.move(x, y)
+            for l in vLineScene.lineItem:
+                if l.a == self.index+1 or l.b == self.index+1:
+                    x = self.ig.points[l.a - 1].x + POINT_SIZE / 2
+                    y = self.ig.points[l.a - 1].y + POINT_SIZE / 2
+                    x1 = self.ig.points[l.b - 1].x + POINT_SIZE / 2
+                    y1 = self.ig.points[l.b - 1].y + POINT_SIZE / 2
+                    # 设置直线位于(x1, y1)和(x2, y2)之间
+                    l.setLine(QLineF(x, y, x1, y1))
+            # vLineView.update()
+            vpFrontView.update()
+
+            messenger.changeStatusBar(message)
 
     def mouseReleaseEvent(self, event):
         message = 'release event at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
@@ -221,6 +256,7 @@ class PointButton(QPushButton):
             return
         x = self.pos().x() + event.pos().x()
         y = self.pos().y() + event.pos().y()
+        self.dragging = False
         # v, index = self.text()
         # print(self.accessibleName())
         # v, index = self.accessibleName()
@@ -228,14 +264,16 @@ class PointButton(QPushButton):
 
     def dragMoveEvent(self, event):
         message = 'drag move at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
+        print(message)
         messenger.changeStatusBar(message)
 
     def dragLeaveEvent(self, event):
         message = 'drag leave at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
+        print(message)
         messenger.changeStatusBar(message)
 
     def mousePressEvent(self, event):
-        if Qt.LeftButton == event.button():
+        if Qt.MiddleButton == event.button():
             self.setStyleSheet(('''
             QPushButton{
             background-color: %s ;
@@ -270,6 +308,9 @@ class PointButton(QPushButton):
             messenger.changeStatusBar(message)
         elif Qt.RightButton == event.button():
             self.showContextMenu(event.pos())
+        elif Qt.LeftButton == event.button():
+            self.dragging = True
+
 
     def enterEvent(self, *args, **kwargs):
         if self.changeColor:
@@ -320,24 +361,44 @@ class PointButton(QPushButton):
             ''') % self.color)
         inLineSum = 0
         outLineSum = 0
+        regionCount = {c: 0 for c in self.ig.colors}
         for i in range(len(self.ig.lines)):
             if self.ig.lines[i].display and \
                     (self.ig.lines[i].a == self.index+1 or self.ig.lines[i].b == self.index+1):
-                if self.ig.lines[i].color == self.color:
+                if vLineScene.lineItem[i].getCurrentColor() == self.getCurrentColor():
                     inLineSum += 1
                 else:
                     outLineSum += 1
+                    if self.ig.lines[i].a == self.index + 1:
+                        anotherPoint = self.ig.lines[i].b
+                    else:
+                        anotherPoint = self.ig.lines[i].a
+                    color = vLineScene.buttons[anotherPoint - 1].getCurrentColor()
+                    regionCount[color] += 1
+        regionCount = {c: regionCount[c] for c in regionCount if regionCount[c] != 0}
+        regionString = '\n' + '\n'.join(['  Community {}: {}'.format(self.ig.colors.index(c)+1, regionCount[c])
+                                         for c in regionCount])
         self.setToolTip('Point: ' + str(self.index+1) + '\nInside: ' + str(inLineSum) +
-                        '\nOutside: ' + str(outLineSum))
+                        '\nOutside: ' + str(outLineSum) + regionString)
         message = 'Enter in point: ' + str(self.index + 1) + \
-                  ' InLine sum: ' + str(inLineSum) + ' OutLine sum: ' + str(outLineSum)
+                  ' InLine sum: ' + str(inLineSum) + ' OutLine sum: ' + str(outLineSum) + regionString.replace('\n', '')
         vLineScene.focusPoint(self.index)
         messenger.changeStatusBar(message)
 
     def leaveEvent(self, *args, **kwargs):
         message = 'Leave in point: ' + str(self.index + 1)
+        self.dragging = False
         vLineScene.leavePoint(saveColor=True)
         messenger.changeStatusBar(message)
+
+    def getCurrentColor(self):
+        if self.changeColor is None:
+            return self.color
+        return self.changeColor
+
+    def getGlobalPos(self):
+        return self.mapToParent(self.pos())
+        # return self.mapToGlobal(self.pos())
 
 
 class LineItem(QGraphicsLineItem):
@@ -371,6 +432,11 @@ class LineItem(QGraphicsLineItem):
         pen.setColor(QColor(color))
         self.setPen(pen)
         self.update()
+
+    def getCurrentColor(self):
+        if self.changeColor is None:
+            return self.color
+        return self.changeColor
 
     def focus(self):
         pen = self.pen()
@@ -416,7 +482,6 @@ class LineItem(QGraphicsLineItem):
         messenger.changeStatusBar('hoverLeave for:%s' % self.name)
 
 
-# class ResultPainter(QWidget):
 class ResultPainter(QWidget):
     def __init__(self, ig, *args):
         super().__init__(*args)
@@ -437,7 +502,7 @@ class ResultPainter(QWidget):
         self.resize(300, 500)
         self.hide()
         self.descLabel = QLabel(self)
-        self.descLabel.setGeometry(20, 380, 260, 200)
+        self.descLabel.setGeometry(20, 380, 260, 400)
         self.descLabel.setText("说明：\n"
                                "    鼠标悬停在点上的时候，第一个数字表示该节点的标识，第二个数字表示该节点与社区内节点的链接数目，"
                                "第三个数字表示该节点与其他社区节点的链接数目。"
@@ -534,7 +599,7 @@ class ResultPainter(QWidget):
             # 注意同一个点不应该重复移动
             removeItem = None
             for i in self.changeSets:
-                print(i['index'], community['index'])
+                # print(i['index'], community['index'])
                 if i['index'] == community['index']:
                     removeItem = i
                     break
@@ -551,7 +616,6 @@ class ResultPainter(QWidget):
                 pointIndex.append(c['index'])
             # 如果未修改过社区划分信息，则重新赋值
             if self.communities == []:
-                print('here')
                 index = 0
                 for c in self.ig.network.communities:
                     self.communities.append([])
@@ -611,7 +675,7 @@ class ResultPainter(QWidget):
                         '{:<10}{}'.format('社区%d的信息熵：'%(index + 1), '%.6f'%(self.entropy[i])))
             index += 1
         qp.drawText(20, (index + 1) * 20, '{:<10}{}'.format('信息熵的总和：', '%.6f'%(sum([i for i in self.entropy]))))
-
+        self.descLabel.setGeometry(20, (index + 2) * 20, 260, 400)
         if self.trigger:
             qp.drawText(15, 200, "输出：%f" % sum([i for i in self.entropy]))
 
@@ -1067,6 +1131,8 @@ class InteractGraph(QMainWindow):
         messenger.setup(self.statusBar())
         self.center()
         vpResultView.show()
+        QShortcut(QKeySequence(QtCore.Qt.CTRL + QtCore.Qt.Key_F), self, self.searchPoint)
+        self.searchState = False
 
     def getCurrentCursorPos(self):
         return vLineView.mapToScene(self.cursor().pos())
@@ -1256,6 +1322,9 @@ class InteractGraph(QMainWindow):
     Enter       ：顺势针旋转
     Space       ：逆时针旋转
     Double Click：还原当前数据
+    Left  Button：拖曳移动节点，点击删除线段
+    Mid   Button：点击删除节点
+    Right Button：右键选择节点社区
     3. 面板说明：
     左视图：不可交互
     中视图：信息熵结果展示与操作区域
@@ -1318,6 +1387,19 @@ class InteractGraph(QMainWindow):
         print("Lines Length: ", len(self.lines))
         for l in self.lines:
             print("Lines:", ' '.join([str(l.a), str(l.b), str(l.color_index), l.color]))
+
+    def searchPoint(self):
+        index, ok = QInputDialog.getText(self, "搜索", "节点编号:", QLineEdit.Normal, "1")
+        index = int(index) - 1
+        # if index in range(len(vLineScene.buttons)):
+        #     vLineScene.focusPoint(index)
+        try:
+            index = int(index) - 1
+            if index in range(len(vLineScene.buttons)):
+                vLineScene.focusPoint(index)
+        except Exception as e:
+            print(e)
+            messenger.changeStatusBar('Error ID input.')
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
