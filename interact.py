@@ -4,18 +4,22 @@
 # @Site    : https://github.com/SilverMaple
 # @File    : interact.py
 
+# import warnings
+# warnings.simplefilter("error")
 from threading import _start_new_thread
-from visualization import Network
+from visualization import Network, Community, COMMUNITY_FILE, NETWORK_FILE
 from FR import FRLayout, FR3DLayout
 from KK import KKLayout
 import sys
-from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint, QThread, pyqtSignal
+import os
+from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint, QThread, pyqtSignal, QSize
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGraphicsScene, QGridLayout, \
     QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel, QAction, QShortcut, QInputDialog, QLineEdit
-from PyQt5.QtGui import QPainter, QPen, QColor, QCursor, QMouseEvent, QIcon, QKeySequence
+from PyQt5.QtGui import QPainter, QPen, QColor, QCursor, QMouseEvent, QIcon, QKeySequence, QPalette, QBrush, QPixmap
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph.opengl as gl
+import matplotlib.pyplot as plt
 import numpy as np
 
 POINT_SIZE = 10
@@ -40,6 +44,30 @@ class Line:
         self.color_index = color_index
         self.color = color
         self.display = True
+
+
+class IconManager():
+
+    def __init__(self):
+        pass
+
+    def generateIcon(self, colorDict=None):
+        colorDict = {'red': 5, 'blue': 2, 'green': 3}
+        # data = np.random.randint(1, 11, 5)
+
+        plt.pie(colorDict.values(), colors=colorDict.keys())
+        plt.axis('equal')
+        # plt.axis('off')
+        # fig = plt.gcf()
+        # plt.gca().xaxis.set_major_locator(plt.NullLocator())
+        # plt.gca().yaxis.set_major_locator(plt.NullLocator())
+        # plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
+        # plt.margins(0,0)
+        # fig.savefig('a.png', format='png', transparent=True, dpi=10, pad_inches = 0)
+        plt.savefig('a.svg', dpi=10, pad_inches=0, transparent=True)
+
+    def getIcon(self, index):
+        pass
 
 
 class Messenger:
@@ -672,9 +700,11 @@ class ResultPainter(QWidget):
             pen = QPen(QtCore.Qt.black, 1, QtCore.Qt.SolidLine)
             qp.setPen(pen)
             qp.drawText(20, index * 20 + 20,
-                        '{:<10}{}'.format('社区%d的信息熵：'%(index + 1), '%.6f'%(self.entropy[i])))
+                        '{:<10}{}'.format('社区%d的H(X|Y)值：'%(index + 1), '%.6f'%(self.entropy[i])))
+                        # '{:<10}{}'.format('社区%d的信息熵：'%(index + 1), '%.6f'%(self.entropy[i])))
             index += 1
-        qp.drawText(20, (index + 1) * 20, '{:<10}{}'.format('信息熵的总和：', '%.6f'%(sum([i for i in self.entropy]))))
+        qp.drawText(20, (index + 1) * 20, '{:<10}{}'.format('H(X|Y)值的总和：', '%.6f'%(sum([i for i in self.entropy]))))
+        # qp.drawText(20, (index + 1) * 20, '{:<10}{}'.format('信息熵的总和：', '%.6f'%(sum([i for i in self.entropy]))))
         self.descLabel.setGeometry(20, (index + 2) * 20, 260, 400)
         if self.trigger:
             qp.drawText(15, 200, "输出：%f" % sum([i for i in self.entropy]))
@@ -830,15 +860,22 @@ class NetworkScene(QGraphicsScene):
         self.ig = ig
         self.buttons = []
         for i in range(len(self.ig.points)):
+
             b = PointButton(self.ig, i, self.ig.points[i].color)
             # b = PointButton(str(self.ig.points[i].name))
             b.setToolTip(str(self.ig.points[i].name))
             b.move(self.ig.points[i].x, self.ig.points[i].y)
             b.resize(POINT_SIZE, POINT_SIZE)
+            # palette1 = QPalette()
+            # # palette1.setColor(self.backgroundRole(), QColor(192,253,123))   # 设置背景颜色
+            # palette1.setBrush(b.backgroundRole(), QBrush(QPixmap('a.png')))  # 设置背景图片
+            # b.setPalette(palette1)
+            # b.setIcon(QIcon("a.png"))
+            # b.setIconSize(QSize(25, 25))
             # b.setParent(self)
             self.addWidget(b)
-            b.show()
             b.setAttribute(Qt.WA_TranslucentBackground, True)
+            b.show()
             self.buttons.append(b)
 
         self.lineItem = []
@@ -1025,6 +1062,7 @@ class ViewPainter(QWidget):
             messenger.changeStatusBar(message)
 
 
+
 class InteractGraph(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
@@ -1060,13 +1098,14 @@ class InteractGraph(QMainWindow):
         self.menuBar().addSeparator()
         self.menuBar().addAction('&3D图显示/关闭', self.change3DViewState)
         self.menuBar().addSeparator()
-        # self.menuBar().addAction('&重新布局', self.reloadLayout)
         self.layout_menu = QMenu('&布局选择', self)
         self.layout_menu.addAction('&FR布局', self.reloadFRLayout)
         self.layout_menu.addAction('&KK布局', self.reloadKKLayout)
         self.menuBar().addMenu(self.layout_menu)
         self.menuBar().addSeparator()
         self.menuBar().addAction('&还原', self.restoreData)
+        self.menuBar().addSeparator()
+        self.menuBar().addAction('&绘制关系图', self.network.drawGraph)
         self.menuBar().addSeparator()
 
         self.menuBar().addAction('&帮助', self.about)
@@ -1365,8 +1404,15 @@ class InteractGraph(QMainWindow):
             except Exception as e:
                 print(e)
 
-    def readLine(self):
-        lineLines = open('lines.txt').readlines()
+    def readLine(self, again=False):
+        lineLines = open('lines.txt').readlines()  if os.path.isfile('lines.txt') else []
+        length = len(open(NETWORK_FILE).readlines())
+        if len(lineLines) != length and not again:
+            self.outputLines()
+            self.readLine(again=True)
+            return
+        elif len(lineLines) != length and again:
+            print("Error generate lines.txt")
         self.lines = []
         for line in lineLines:
             try:
@@ -1375,6 +1421,44 @@ class InteractGraph(QMainWindow):
                 self.lines.append(Line(int(a), int(b), int(c), color=d))
             except Exception as e:
                 print(e)
+
+    def outputLines(self):
+        # 2 1 1 "#FF0099FF"
+        f = open('lines.txt', 'w')
+        cs = ["#FF0099FF", "#CC00FFFF", "#3300FFFF", "#0066FFFF", "#00FFFFFF", "#00FF66FF",
+              "#33FF00FF", "#CCFF00FF", "#FF9900FF", "#FF0000FF", "#000000FF"]
+
+        lines = open(COMMUNITY_FILE, 'r', encoding='utf-8').readlines()
+        communities = [Community() for i in range(len(lines))]
+        for i in range(len(lines)):
+            line = lines[i]
+            _, members_list = line.split(':')
+            members = members_list.strip().split(' ')
+            for m in members:
+                if not m.isdigit():
+                    continue
+                m = int(m)
+                communities[i].vertexes.append(m)
+
+        lineColors = [] # [[a, b, c, color]]
+        lines = open(NETWORK_FILE, 'r').readlines()
+        for i in range(len(lines)):
+            a, b = lines[i].replace('\n', '').split(' ')
+            a = int(a)
+            b = int(b)
+            same_side = False
+            for c in communities:
+                if a in c.vertexes and b in c.vertexes:
+                    same_side = True
+                    ci = communities.index(c)
+                    lineColors.append([a, b, ci, cs[ci]])
+                    break
+            if not same_side:
+                lineColors.append([a, b, len(cs), cs[-1]])
+            f.write(str(lineColors[i][0]) + ' ' + str(lineColors[i][1]) + ' ' + str(lineColors[i][2]) +
+                    ' "' + lineColors[i][3] +'"\n')
+        f.flush()
+        f.close()
 
     def updateGraph(self):
         pass
@@ -1401,12 +1485,14 @@ class InteractGraph(QMainWindow):
             print(e)
             messenger.changeStatusBar('Error ID input.')
 
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    # a = ViewNameLabel(text="here")
+
+    ic = IconManager()
+    ic.generateIcon()
     ig = InteractGraph()
-    ig.setWindowTitle("信息熵可视化")
+    ig.setWindowTitle("可视化分析软件")
     # ig.showData()
     ig.show()
-    # sys.exit(qApp.exec_())
     app.exec_()

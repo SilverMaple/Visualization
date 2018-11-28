@@ -5,10 +5,11 @@
 # @File    : visualization.py
 import win32api
 import win32con
-import igraph.vendor.texttable
+# import igraph.vendor.texttable
 from pylab import *
 import subprocess
-from igraph import *
+import os
+from igraph import Graph
 from xlwt import *
 import win_unicode_console
 
@@ -306,6 +307,7 @@ class Network():
         pass
 
     def plotGraph(self, x, y, label, xlabel, ylabel, title, names=None):
+        plt.clf()
         plt.plot(x, y, marker='o', mec='r', mfc='w', label=label)
         plt.legend()  # 让图例生效
         if names:
@@ -317,7 +319,7 @@ class Network():
         plt.title(title)  # 标题
         plt.show()
 
-    def drawGraph(self):
+    def drawGraphDeprecated(self):
         lines = open('mutualInformation.txt', 'r').readlines()
         index = -1
         mutualInformation = []
@@ -349,7 +351,7 @@ class Network():
         self.plotGraph(range(2, len(totalEntropy)+2), totalEntropy, u'平均互信息最大时',
                        u'社区个数', u'总信息熵', title=dataSetName+u'数据集社区个数-总信息熵关系折线图')
 
-        self.plotGraph(range(2, len(mutualInformation)+1), mutualInformation[1:], u'GN算法进行社区划分',
+        self.plotGraph(range(2, len(mutualInformation)+1), list(map(float, mutualInformation[1:])), u'GN算法进行社区划分',
                        u'社区个数', u'平均互信息', title=dataSetName+u'数据集社区个数-平均互信息关系折线图')
 
         self.plotGraph(mutualInformation[1:], totalEntropy, u'GN算法进行社区划分',
@@ -370,6 +372,40 @@ class Network():
                        [(float(mutualInformation[i+1])-float(mutualInformation[i])) / (totalEntropy[i]-totalEntropy[i-1]) for i in range(1, len(totalEntropy)-1)],
                        u'GN算法进行社区划分', u'社区个数', u'平均互信息与总信息熵比例',
                        title=dataSetName + u'数据集社区个数-平均互信息与总信息熵变化比例关系折线图')
+
+    def drawGraph(self):
+        lines = open('mutualInformation.txt', 'r').readlines()
+        index = -1
+        mutualInformation = []
+        totalEntropy = []
+        communityCluster = []
+        for line in lines:
+            if not index < 10:
+                communityCluster.remove([])
+                break
+            if line.startswith("Q值为："):
+                index += 1
+                i = line.strip()[4:]
+                mutualInformation.append(i)
+                communityCluster.append([])
+            elif '中的结点有：' in line:
+                communityCluster[index].append(line.strip().split('：')[1])
+            else:
+                pass
+
+        print('communityCluster: ', communityCluster)
+
+        for c in communityCluster:
+            totalEntropy.append(sum(self.get_entropy(community=c)))
+
+        print('mutualInformation: ', mutualInformation)
+        print('totalEntropy', totalEntropy)
+        print(range(2, len(mutualInformation)+1))
+        print(mutualInformation[1:])
+
+        dataSetName = u'Dolphin'
+        self.plotGraph(range(2, len(mutualInformation)+1), list(map(float, mutualInformation[1:])), u'GN算法',
+                       u'社区个数', u'平均互信息(IP)值', title="")
 
 
 if __name__ == '__main__':
