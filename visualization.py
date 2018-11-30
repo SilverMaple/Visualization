@@ -405,7 +405,7 @@ class Network():
 
         dataSetName = u'Dolphin'
         self.plotGraph(range(2, len(mutualInformation)+1), list(map(float, mutualInformation[1:])), u'GN算法',
-                       u'社区个数', u'平均互信息(IP)值', title="")
+                       u'社区个数', u'平均互信息(Ip)值', title="")
 
 
 if __name__ == '__main__':

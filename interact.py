@@ -1091,6 +1091,8 @@ class InteractGraph(QMainWindow):
         #                          QtCore.Qt.CTRL + QtCore.Qt.Key_L)
         self.file_menu.addAction('&还原', self.restoreData,
                                  QtCore.Qt.CTRL + QtCore.Qt.Key_D)
+        self.file_menu.addAction('&切换菜单', self.switchMenu)
+        self.menuState = True
         self.file_menu.addAction('&退出', self.fileQuit,
                                  QtCore.Qt.CTRL + QtCore.Qt.Key_Q)
         self.menuBar().addMenu(self.file_menu)
@@ -1345,6 +1347,29 @@ class InteractGraph(QMainWindow):
         # vLineScene.reload()
         # vLineView.update()
 
+    def switchMenu(self):
+        if self.menuState:
+            for a in self.menuBar().actions()[1:]:
+                self.menuBar().removeAction(a)
+            self.menuBar().addSeparator()
+            self.menuBar().addAction('&绘制关系图', self.network.drawGraph)
+            self.menuBar().addSeparator()
+            self.menuBar().addAction('&帮助', self.about)
+        else:
+            for a in self.menuBar().actions()[1:]:
+                self.menuBar().removeAction(a)
+            self.menuBar().addSeparator()
+            self.menuBar().addAction('&3D图显示/关闭', self.change3DViewState)
+            self.menuBar().addSeparator()
+            self.menuBar().addMenu(self.layout_menu)
+            self.menuBar().addSeparator()
+            self.menuBar().addAction('&还原', self.restoreData)
+            self.menuBar().addSeparator()
+            self.menuBar().addAction('&绘制关系图', self.network.drawGraph)
+            self.menuBar().addSeparator()
+            self.menuBar().addAction('&帮助', self.about)
+        self.menuState = not self.menuState
+
     def about(self):
         QMessageBox.about(self, "帮助",
                           """
@@ -1390,8 +1415,24 @@ class InteractGraph(QMainWindow):
     def closeEvent(self, ce):
         self.fileQuit()
 
-    def readPoint(self):
+    def readPoint(self, again=False):
         pointsLines = open('points.txt').readlines()
+        lines = open(COMMUNITY_FILE).readlines()
+        length = 0
+        for i in range(len(lines)):
+            line = lines[i]
+            name, members_list = line.split(':')
+            members = members_list.strip().split(' ')
+            for m in members:
+                if not m.isdigit():
+                    continue
+                length += 1
+        if len(pointsLines) != length and not again:
+            self.outputPoints()
+            self.readPoint(again=True)
+            return
+        elif len(pointsLines) != length and again:
+            print("Error generate points.txt")
         self.points = []
         self.colors = []
         for line in pointsLines:
@@ -1403,6 +1444,40 @@ class InteractGraph(QMainWindow):
                 self.points.append(Point(float(a), float(b), len(self.points) + 1, color=c))
             except Exception as e:
                 print(e)
+
+    def outputPoints(self):
+        # "228.918895098647" "319.544170947533" "#FF0000FF"
+        f = open('points.txt', 'w')
+        cs = ["#FF0099FF", "#CC00FFFF", "#3300FFFF", "#0066FFFF", "#00FFFFFF", "#00FF66FF",
+              "#33FF00FF", "#CCFF00FF", "#FF9900FF", "#FF0000FF", "#000000FF"]
+
+        lines = open(COMMUNITY_FILE, 'r', encoding='utf-8').readlines()
+        communities = [Community() for i in range(len(lines))]
+        count = 0
+        for i in range(len(lines)):
+            line = lines[i]
+            _, members_list = line.split(':')
+            members = members_list.strip().split(' ')
+            for m in members:
+                if not m.isdigit():
+                    continue
+                m = int(m)
+                count += 1
+                communities[i].vertexes.append(m)
+        for i in range(count):
+            color = None
+            for ci in range(len(communities)):
+                if i+1 in communities[ci].vertexes:
+                    try:
+                        color = cs[ci]
+                    except Exception as e:
+                        print(i)
+                        print(e)
+                    break
+
+            f.write('"' + str(np.random.rand()*500) + '" "' + str(np.random.rand()*500) + '" "' + color +'"\n')
+        f.flush()
+        f.close()
 
     def readLine(self, again=False):
         lineLines = open('lines.txt').readlines()  if os.path.isfile('lines.txt') else []
