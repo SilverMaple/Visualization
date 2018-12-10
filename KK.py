@@ -13,6 +13,7 @@ import win_unicode_console
 from numpy.random.mtrand import rand, randint
 
 from FR import Community
+from visualization import COLOR_CONFIG
 
 VERTEXES_COUNT = 0
 NETWORK_FILE = 'f1.txt'
@@ -399,7 +400,8 @@ class KKLayout:
     def outputPoints(self):
         # "228.918895098647" "319.544170947533" "#FF0000FF"
         f = open('points.txt', 'w')
-        cs = ['#FF0099FF', '#CC00FFFF', '#3300FFFF']
+        cs = COLOR_CONFIG
+        # cs = ['#FF0099FF', '#CC00FFFF', '#3300FFFF']
         # 转化格式
         self.positionsIndex = {i: (self.finalPos[i-1]['x'], self.finalPos[i-1]['y'])
                                for i in range(1, len(self.finalPos)+1)}

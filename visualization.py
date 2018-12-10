@@ -6,25 +6,29 @@
 import win32api
 import win32con
 # import igraph.vendor.texttable
+from matplotlib.font_manager import FontProperties
 from pylab import *
 import subprocess
 import os
 from igraph import Graph
 from xlwt import *
 import win_unicode_console
-
+# mpl.rcParams['font.sans-serif'] = ['Times New Roman']
 mpl.rcParams['font.sans-serif'] = ['SimHei']
-
 
 VERTEXES_COUNT = 0
 NETWORK_FILE = 'f1.txt'
 COMMUNITY_FILE = 'f2.txt'
+MUTUAL_INFORMATION_FILE = 'mutualInformation.txt'
 C_PLUS_DIR = 'c_plus/release'
 CALCULATE_EXE = 'cal_InformationEntropy.exe'
 INPUT_EDGE_FILE = C_PLUS_DIR + '/Edge.txt'
 INPUT_COMMUNITY_FILE = C_PLUS_DIR + '/Community.txt'
 OUTPUT_ENTROPY_FILE = C_PLUS_DIR + '/output_communityEntropy.txt'
 OUTPUT_BETWEEN_LINES_FILE = C_PLUS_DIR + '/community_edge.txt'
+
+COLOR_CONFIG = ["#FF0099FF", "#CC00FFFF", "#3300FFFF", "#0066FFFF", "#00FFFFFF", "#00FF66FF",
+              "#33FF00FF", "#CCFF00FF", "#FF9900FF", "#FF0000FF", "#000000FF"]
 
 class Community():
 
@@ -63,8 +67,10 @@ class Network():
 
     def get_vertexes_count(self):
         lines = open(COMMUNITY_FILE, 'r', encoding='utf-8').readlines()
+        global VERTEXES_COUNT
+        VERTEXES_COUNT = 0
         for i in range(len(lines)):
-            global  VERTEXES_COUNT
+            # global  VERTEXES_COUNT
             line = lines[i]
             name, members_list = line.split(':')
             VERTEXES_COUNT += len(members_list.split())
@@ -306,8 +312,11 @@ class Network():
         wb.save('统计.xls')
         pass
 
-    def plotGraph(self, x, y, label, xlabel, ylabel, title, names=None):
+    def plotGraph(self, x, y, label, xlabel, ylabel, title, names=None, grid=False, yticks=False):
         plt.clf()
+        # plt.rcParams['font.sans-serif'] = ['Times New Roman']
+        # plt.rcParams['axes.unicode_minus'] = True
+        # font1 = matplotlib.font_manager.FontProperties(fname='C:\Windows\Fonts\simsun.ttc')
         plt.plot(x, y, marker='o', mec='r', mfc='w', label=label)
         plt.legend()  # 让图例生效
         if names:
@@ -315,12 +324,21 @@ class Network():
         plt.margins(0)
         plt.subplots_adjust(bottom=0.15)
         plt.xlabel(xlabel)  # X轴标签
+        # plt.xlabel(xlabel, fontproperties=my_font)  # X轴标签
         plt.ylabel(ylabel)  # Y轴标签
+        if yticks:
+            plt.yticks(np.linspace(min(y), max(y), num=10))
+        if grid:
+            plt.grid()
+        tmp_x = abs(max(x)-min(x))*0.1
+        tmp_y = abs(max(y)-min(y))*0.2
+        plt.xlim((min(x)-tmp_x, max(x)+tmp_x))
+        plt.ylim((min(y)-tmp_y, max(y)+tmp_y))
         plt.title(title)  # 标题
         plt.show()
 
     def drawGraphDeprecated(self):
-        lines = open('mutualInformation.txt', 'r').readlines()
+        lines = open(MUTUAL_INFORMATION_FILE, 'r').readlines()
         index = -1
         mutualInformation = []
         totalEntropy = []
@@ -374,7 +392,7 @@ class Network():
                        title=dataSetName + u'数据集社区个数-平均互信息与总信息熵变化比例关系折线图')
 
     def drawGraph(self):
-        lines = open('mutualInformation.txt', 'r').readlines()
+        lines = open(MUTUAL_INFORMATION_FILE, 'r').readlines()
         index = -1
         mutualInformation = []
         totalEntropy = []
@@ -393,19 +411,26 @@ class Network():
             else:
                 pass
 
-        print('communityCluster: ', communityCluster)
+        # print('communityCluster: ', communityCluster)
 
         for c in communityCluster:
             totalEntropy.append(sum(self.get_entropy(community=c)))
 
-        print('mutualInformation: ', mutualInformation)
-        print('totalEntropy', totalEntropy)
-        print(range(2, len(mutualInformation)+1))
-        print(mutualInformation[1:])
+        # print('mutualInformation: ', mutualInformation)
+        # print('totalEntropy', totalEntropy)
+        # print(range(2, len(mutualInformation)+1))
+        # print(mutualInformation[1:])
 
         dataSetName = u'Dolphin'
-        self.plotGraph(range(2, len(mutualInformation)+1), list(map(float, mutualInformation[1:])), u'GN算法',
-                       u'社区个数', u'平均互信息(Ip)值', title="")
+        self.plotGraph(range(2, len(mutualInformation)+1), list(map(float, mutualInformation[1:])), u'AMI-GN算法',
+                       u'社区个数', u'平均互信息值', title="")
+                       # u'社区个数', u'平均互信息(Ip)值', title="")
+        self.plotGraph(range(2, len(mutualInformation) + 1), list(map(float, mutualInformation[1:])), u'AMI-GN算法',
+                       u'社区个数', u'平均互信息值', title="", grid=True)
+        self.plotGraph(range(2, len(mutualInformation) + 1), list(map(float, mutualInformation[1:])), u'AMI-GN算法',
+                       u'社区个数', u'平均互信息值', title="", grid=False, yticks=True)
+        self.plotGraph(range(2, len(mutualInformation) + 1), list(map(float, mutualInformation[1:])), u'AMI-GN算法',
+                       u'社区个数', u'平均互信息值', title="", grid=False, yticks=True)
 
 
 if __name__ == '__main__':

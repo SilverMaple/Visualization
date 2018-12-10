@@ -6,15 +6,17 @@
 
 # import warnings
 # warnings.simplefilter("error")
+import shutil
 from threading import _start_new_thread
-from visualization import Network, Community, COMMUNITY_FILE, NETWORK_FILE
+from visualization import Network, Community, COMMUNITY_FILE, NETWORK_FILE, MUTUAL_INFORMATION_FILE, COLOR_CONFIG
 from FR import FRLayout, FR3DLayout
 from KK import KKLayout
 import sys
 import os
 from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint, QThread, pyqtSignal, QSize
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGraphicsScene, QGridLayout, \
-    QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel, QAction, QShortcut, QInputDialog, QLineEdit
+    QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel, QAction, QShortcut, QInputDialog, QLineEdit, \
+    QFileDialog
 from PyQt5.QtGui import QPainter, QPen, QColor, QCursor, QMouseEvent, QIcon, QKeySequence, QPalette, QBrush, QPixmap
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
@@ -696,14 +698,20 @@ class ResultPainter(QWidget):
         for i in range(len(self.entropy)):
             pen = QPen(QColor(self.ig.colors[i]), 1, QtCore.Qt.SolidLine)
             qp.setPen(pen)
-            qp.drawText(5, index * 20 + 20, "●")
+            # qp.drawText(5, index * 20 + 20, "●")
+            qp.drawText(20, index * 20 + (len(self.entropy)+8)*20, "●"+'代表社区%d'%(index+1))
             pen = QPen(QtCore.Qt.black, 1, QtCore.Qt.SolidLine)
             qp.setPen(pen)
-            qp.drawText(20, index * 20 + 20,
-                        '{:<10}{}'.format('社区%d的H(X|Y)值：'%(index + 1), '%.6f'%(self.entropy[i])))
+            # qp.drawText(20, index * 20 + 20,
+            #             '{:<10}{}'.format('社区%d的H(X|Y)值：'%(index + 1), '%.6f'%(self.entropy[i])))
                         # '{:<10}{}'.format('社区%d的信息熵：'%(index + 1), '%.6f'%(self.entropy[i])))
             index += 1
-        qp.drawText(20, (index + 1) * 20, '{:<10}{}'.format('H(X|Y)值的总和：', '%.6f'%(sum([i for i in self.entropy]))))
+        if ig.formulaState:
+            qp.drawText(20, 20, '{:<10}{}'.format('网络中的H(X|Y)值：', '%.6f'%(sum([i for i in self.entropy]))))
+        else:
+            Q = ig.getQ(len(ig.network.communities))
+            qp.drawText(20, 20, '{:<10}{}'.format('网络中的平均互信息值：', '%s' % (Q if Q is not None else '')))
+        # qp.drawText(20, (index + 1) * 20, '{:<10}{}'.format('H(X|Y)值的总和：', '%.6f'%(sum([i for i in self.entropy]))))
         # qp.drawText(20, (index + 1) * 20, '{:<10}{}'.format('信息熵的总和：', '%.6f'%(sum([i for i in self.entropy]))))
         self.descLabel.setGeometry(20, (index + 2) * 20, 260, 400)
         if self.trigger:
@@ -1063,6 +1071,13 @@ class ViewPainter(QWidget):
 
 
 
+class ThreeDView(gl.GLViewWidget):
+    def __init__(self, ig):
+        super().__init__()
+
+    def close(self):
+        ig.timer.deleteLater()
+
 class InteractGraph(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
@@ -1092,7 +1107,11 @@ class InteractGraph(QMainWindow):
         self.file_menu.addAction('&还原', self.restoreData,
                                  QtCore.Qt.CTRL + QtCore.Qt.Key_D)
         self.file_menu.addAction('&切换菜单', self.switchMenu)
+        self.file_menu.addAction('&变换计算公式', self.switchFormula)
         self.menuState = True
+        self.formulaState = True
+        self.file_menu.addAction('&重新载入数据', self.reloadAll,
+                                 QtCore.Qt.CTRL + QtCore.Qt.Key_R)
         self.file_menu.addAction('&退出', self.fileQuit,
                                  QtCore.Qt.CTRL + QtCore.Qt.Key_Q)
         self.menuBar().addMenu(self.file_menu)
@@ -1179,7 +1198,8 @@ class InteractGraph(QMainWindow):
         return vLineView.mapToScene(self.cursor().pos())
 
     def get3DView(self, dynamic=None):
-        w = gl.GLViewWidget()
+        w = ThreeDView(self)
+        # w = gl.GLViewWidget()
         w.opts['distance'] = 10
         w.hide()
         w.setWindowTitle('Network 3D Graph')
@@ -1205,9 +1225,13 @@ class InteractGraph(QMainWindow):
         colors = [(1, 0, 0, .8), (0, 1, 0, .8), (0, 0, 1, .8),
                   (1, 1, 0, .8), (1, 0, 1, .8), (0, 1, 1, .8)]
 
-        pos = np.empty((105, 3))
-        size = np.empty(105)
-        color = np.empty((105, 4))
+        # never hard-code number
+        # pos = np.empty((105, 3))
+        # size = np.empty(105)
+        # color = np.empty((105, 4))
+        pos = np.empty((len(self.network.vertexes), 3))
+        size = np.empty(len(self.network.vertexes))
+        color = np.empty((len(self.network.vertexes), 4))
         for i in range(len(self.points)):
             pos[i] = ((points[i+1][0] - 1700)/300.0,
                       (points[i+1][1]-1700)/300.0,
@@ -1243,6 +1267,7 @@ class InteractGraph(QMainWindow):
         self.v3DView = w
         if dynamic:
             # 显示动态过程
+            print('here1')
             self.dynamicPointsIndex = 0
             self.timer = QtCore.QTimer()
             self.timer.timeout.connect(self.update)
@@ -1370,6 +1395,34 @@ class InteractGraph(QMainWindow):
             self.menuBar().addAction('&帮助', self.about)
         self.menuState = not self.menuState
 
+    def switchFormula(self):
+        if self.formulaState:
+            self.vpViews[1].update()
+        else:
+            self.vpViews[1].update()
+        self.formulaState = not self.formulaState
+
+    def getQ(self, n):
+        if n == 1:
+            return 0
+        n += 1
+        lines = open(MUTUAL_INFORMATION_FILE, 'r').readlines()
+        targetStr = '社团数为：'+str(n)
+        for i in range(len(lines)):
+            line = lines[i]
+            if line.startswith(targetStr) and i+1 < len(lines):
+                # Q值为：0.50356
+                return float(lines[i+1][4:-1])
+        return None
+
+    def reloadAll(self):
+        self.destroy()
+        if self.v3DView is not None:
+            self.v3DView.close()
+            self.v3DView.destroy()
+        self.__init__()
+        self.show()
+
     def about(self):
         QMessageBox.about(self, "帮助",
                           """
@@ -1399,7 +1452,25 @@ class InteractGraph(QMainWindow):
                           )
 
     def loadData(self):
-        pass
+        sourceDir = QFileDialog.getExistingDirectory()
+        targetDir = os.getcwd().replace('\\', '/')
+        copyFiles = [NETWORK_FILE, COMMUNITY_FILE, MUTUAL_INFORMATION_FILE]
+        print(copyFiles)
+        print(targetDir)
+        print(sourceDir)
+        for f in copyFiles:
+            sourceFile = os.path.join(sourceDir, f)
+            targetFile = os.path.join(targetDir, f)
+            print(sourceFile, targetFile)
+            if os.path.isfile(sourceFile):
+                print('here')
+                shutil.copy(sourceFile, targetFile)
+            else:
+                QMessageBox.about(self, "提示", '目标文件夹以下文件不完整：\n%s'%
+                                  (str(copyFiles).replace(',', '\n').replace('[', '').replace(']', '')
+                                   .replace('\'', '').replace(' ', '')))
+                return
+        self.reloadAll()
 
     def saveData(self):
         # save as a graph
@@ -1411,12 +1482,15 @@ class InteractGraph(QMainWindow):
 
     def fileQuit(self):
         self.close()
+        # 主动退出程序
+        sys.exit(app)
+        # sys.exit(app.exec_())
 
     def closeEvent(self, ce):
         self.fileQuit()
 
     def readPoint(self, again=False):
-        pointsLines = open('points.txt').readlines()
+        pointsLines = open('points.txt').readlines() if os.path.isfile('points.txt') else []
         lines = open(COMMUNITY_FILE).readlines()
         length = 0
         for i in range(len(lines)):
@@ -1448,8 +1522,7 @@ class InteractGraph(QMainWindow):
     def outputPoints(self):
         # "228.918895098647" "319.544170947533" "#FF0000FF"
         f = open('points.txt', 'w')
-        cs = ["#FF0099FF", "#CC00FFFF", "#3300FFFF", "#0066FFFF", "#00FFFFFF", "#00FF66FF",
-              "#33FF00FF", "#CCFF00FF", "#FF9900FF", "#FF0000FF", "#000000FF"]
+        cs = COLOR_CONFIG
 
         lines = open(COMMUNITY_FILE, 'r', encoding='utf-8').readlines()
         communities = [Community() for i in range(len(lines))]
@@ -1500,8 +1573,7 @@ class InteractGraph(QMainWindow):
     def outputLines(self):
         # 2 1 1 "#FF0099FF"
         f = open('lines.txt', 'w')
-        cs = ["#FF0099FF", "#CC00FFFF", "#3300FFFF", "#0066FFFF", "#00FFFFFF", "#00FF66FF",
-              "#33FF00FF", "#CCFF00FF", "#FF9900FF", "#FF0000FF", "#000000FF"]
+        cs = COLOR_CONFIG
 
         lines = open(COMMUNITY_FILE, 'r', encoding='utf-8').readlines()
         communities = [Community() for i in range(len(lines))]
@@ -1564,10 +1636,10 @@ class InteractGraph(QMainWindow):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
 
-    ic = IconManager()
-    ic.generateIcon()
+    # ic = IconManager()
+    # ic.generateIcon()
     ig = InteractGraph()
-    ig.setWindowTitle("可视化分析软件")
+    ig.setWindowTitle("AMI可视化分析软件")
     # ig.showData()
     ig.show()
     app.exec_()

@@ -10,6 +10,8 @@ import random
 from igraph import *
 import win_unicode_console
 
+from visualization import COLOR_CONFIG
+
 mpl.rcParams['font.sans-serif'] = ['SimHei']
 
 
@@ -206,7 +208,8 @@ class FRLayout():
     def outputPoints(self):
         # "228.918895098647" "319.544170947533" "#FF0000FF"
         f = open('points.txt', 'w')
-        cs = ['#FF0099FF', '#CC00FFFF', '#3300FFFF']
+        cs = COLOR_CONFIG
+        # cs = ['#FF0099FF', '#CC00FFFF', '#3300FFFF']
         for i in range(len(self.positions)):
             color = None
             for ci in range(len(self.communities)):
