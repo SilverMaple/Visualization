@@ -696,10 +696,16 @@ class ResultPainter(QWidget):
     def draw(self, qp):
         index = 0
         for i in range(len(self.entropy)):
-            pen = QPen(QColor(self.ig.colors[i]), 1, QtCore.Qt.SolidLine)
+            try:
+                pen = QPen(QColor(self.ig.colors[i]), 1, QtCore.Qt.SolidLine)
+            except Exception as e:
+                print(e)
+                print(i, len(self.entropy), len(self.ig.colors))
+                print(self.ig.colors)
             qp.setPen(pen)
             # qp.drawText(5, index * 20 + 20, "●")
-            qp.drawText(20, index * 20 + (len(self.entropy)+8)*20, "●"+'代表社区%d'%(index+1))
+            # qp.drawText(20, index * 20 + (len(self.entropy)+8)*20, "●"+'代表社区%d'%(index+1))
+            qp.drawText(20, index * 20 + 40, "●"+'代表社区%d'%(index+1))
             pen = QPen(QtCore.Qt.black, 1, QtCore.Qt.SolidLine)
             qp.setPen(pen)
             # qp.drawText(20, index * 20 + 20,
@@ -1213,18 +1219,15 @@ class InteractGraph(QMainWindow):
         else:
             self.dynamicPoints = fr.outputLayout(dynamic=dynamic)
             points = self.dynamicPoints[0]
-        # print(points)
-        # Gradient = A + (B - A) * N / Step
-        # colorA = (1, 0, 0)
-        # colorB = (0, 0, 1)
-        # for i in range(1, 10):
-        #     a = colorA[0] + (colorB[0] - colorA[0]) * i / 10.0
-        #     b = colorA[1] + (colorB[1] - colorA[1]) * i / 10.0
-        #     c = colorA[2] + (colorB[2] - colorA[2]) * i / 10.0
-        #     colors.append((a, b, c, 0.8))
-        colors = [(1, 0, 0, .8), (0, 1, 0, .8), (0, 0, 1, .8),
-                  (1, 1, 0, .8), (1, 0, 1, .8), (0, 1, 1, .8)]
-
+        # colors = [(1, 0, 0, .8), (0, 1, 0, .8), (0, 0, 1, .8),
+        #           (1, 1, 0, .8), (1, 0, 1, .8), (0, 1, 1, .8),
+        #           (1, 1, 1, .8)]
+        for s in COLOR_CONFIG[:-1]:
+            r = int(s[1:3], 16) / 255
+            g = int(s[3:5], 16) / 255
+            b = int(s[5:7], 16) /255
+            colors.append((r, g, b, .8))
+        colors.append((1, 1, 1, .8))
         # never hard-code number
         # pos = np.empty((105, 3))
         # size = np.empty(105)
@@ -1267,7 +1270,6 @@ class InteractGraph(QMainWindow):
         self.v3DView = w
         if dynamic:
             # 显示动态过程
-            print('here1')
             self.dynamicPointsIndex = 0
             self.timer = QtCore.QTimer()
             self.timer.timeout.connect(self.update)
@@ -1280,6 +1282,8 @@ class InteractGraph(QMainWindow):
         if self.dynamicPointsIndex >= len(self.dynamicPoints):
             self.dynamicPointsIndex = 0
         sizes = []
+        if self.v3DView is not None and self.v3DView.isVisible() and self.scatterPlotPos is None:
+            self.v3DView = self.get3DView(dynamic=True)
         for i in range(len(self.scatterPlotPos)):
             self.scatterPlotPos[i] = ((self.dynamicPoints[self.dynamicPointsIndex][i+1][0]- 1700)/300.0,
                                       (self.dynamicPoints[self.dynamicPointsIndex][i+1][1]- 1700)/300.0,
@@ -1300,6 +1304,7 @@ class InteractGraph(QMainWindow):
     def change3DViewState(self):
         if self.v3DView is None:
             message = '3D视图创建中...'
+            print(message)
             messenger.changeStatusBar(message)
             v3DView = self.get3DView(dynamic=True)
             self.v3DView = v3DView
@@ -1416,10 +1421,14 @@ class InteractGraph(QMainWindow):
         return None
 
     def reloadAll(self):
-        self.destroy()
         if self.v3DView is not None:
             self.v3DView.close()
             self.v3DView.destroy()
+            self.scatterPlotPos = None
+            self.timer.stop()
+        for f in ['lines.txt', 'points.txt']:
+            os.remove(os.path.join(os.getcwd(), f))
+        self.destroy()
         self.__init__()
         self.show()
 
@@ -1463,7 +1472,6 @@ class InteractGraph(QMainWindow):
             targetFile = os.path.join(targetDir, f)
             print(sourceFile, targetFile)
             if os.path.isfile(sourceFile):
-                print('here')
                 shutil.copy(sourceFile, targetFile)
             else:
                 QMessageBox.about(self, "提示", '目标文件夹以下文件不完整：\n%s'%
@@ -1508,13 +1516,14 @@ class InteractGraph(QMainWindow):
         elif len(pointsLines) != length and again:
             print("Error generate points.txt")
         self.points = []
-        self.colors = []
+        # self.colors = []
+        self.colors = [c[:-2] for c in COLOR_CONFIG]
         for line in pointsLines:
             try:
                 a, b, c = line.strip().replace('"', '').split()
                 c = c[:-2]
-                if c not in self.colors:
-                    self.colors.append(c)
+                # if c not in self.colors:
+                #     self.colors.append(c)
                 self.points.append(Point(float(a), float(b), len(self.points) + 1, color=c))
             except Exception as e:
                 print(e)

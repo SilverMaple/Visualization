@@ -27,8 +27,11 @@ INPUT_COMMUNITY_FILE = C_PLUS_DIR + '/Community.txt'
 OUTPUT_ENTROPY_FILE = C_PLUS_DIR + '/output_communityEntropy.txt'
 OUTPUT_BETWEEN_LINES_FILE = C_PLUS_DIR + '/community_edge.txt'
 
-COLOR_CONFIG = ["#FF0099FF", "#CC00FFFF", "#3300FFFF", "#0066FFFF", "#00FFFFFF", "#00FF66FF",
-              "#33FF00FF", "#CCFF00FF", "#FF9900FF", "#FF0000FF", "#000000FF"]
+# COLOR_CONFIG = ["#FF0099FF", "#CC00FFFF", "#3300FFFF", "#0066FFFF", "#00FFFFFF", "#00FF66FF",
+#               "#33FF00FF", "#CCFF00FF", "#FF9900FF", "#FF0000FF", "#000000FF"]
+COLOR_CONFIG = ["#FF0000FF", "#3300FFFF", "#33FF00FF", "#FF9900FF", "#CC00FFFF",
+                "#0066FFFF", "#00FFFFFF", "#006400FF", "#CCFF00FF", "#FF0099FF", "#000000FF"]
+
 
 class Community():
 
@@ -50,8 +53,11 @@ class Network():
         self.visual_style = self.init_visual_style()
 
     def init_visual_style(self):
-        self.color_dict = {0: "blue", 1: "green", 2:"red", 3:"yellow", 4:"orange", 5:"pink", 6:"gray"}
-        self.shape_dict = {0: "circle", 1: "triangle-up", 2:"rectangle", 3:"triangle-down", 4: "circle", 5: "triangle-up", 6:"rectangle",}
+        self.color_dict = {0: "blue", 1: "green", 2:"red", 3:"yellow", 4:"orange", 5:"pink", 6:"gray",
+                           7:"purple", 8:"white", 9:"black", 10:"cyan"}
+        self.shape_dict = {0: "circle", 1: "triangle-up", 2:"rectangle", 3:"triangle-down", 4: "circle",
+                           5: "triangle-up", 6:"rectangle", 7: "circle", 8: "triangle-up", 9:"rectangle",
+                           10:"triangle-down"}
         self.visual_style = {}
         self.visual_style['vertex_size'] = 20
         self.visual_style['vertex_color'] = [self.color_dict[0] for i in range(VERTEXES_COUNT)]
@@ -326,6 +332,7 @@ class Network():
         plt.xlabel(xlabel)  # X轴标签
         # plt.xlabel(xlabel, fontproperties=my_font)  # X轴标签
         plt.ylabel(ylabel)  # Y轴标签
+        plt.xticks(range(min(x), max(x)+1))
         if yticks:
             plt.yticks(np.linspace(min(y), max(y), num=10))
         if grid:
@@ -430,7 +437,7 @@ class Network():
         self.plotGraph(range(2, len(mutualInformation) + 1), list(map(float, mutualInformation[1:])), u'AMI-GN算法',
                        u'社区个数', u'平均互信息值', title="", grid=False, yticks=True)
         self.plotGraph(range(2, len(mutualInformation) + 1), list(map(float, mutualInformation[1:])), u'AMI-GN算法',
-                       u'社区个数', u'平均互信息值', title="", grid=False, yticks=True)
+                       u'社区个数', u'平均互信息值', title="", grid=True, yticks=True)
 
 
 if __name__ == '__main__':
