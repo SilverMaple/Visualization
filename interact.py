@@ -17,7 +17,8 @@ from PyQt5.QtCore import Qt, QLineF, QRectF, QPoint, QThread, pyqtSignal, QSize
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGraphicsScene, QGridLayout, \
     QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel, QAction, QShortcut, QInputDialog, QLineEdit, \
     QFileDialog
-from PyQt5.QtGui import QPainter, QPen, QColor, QCursor, QMouseEvent, QIcon, QKeySequence, QPalette, QBrush, QPixmap
+from PyQt5.QtGui import QPainter, QPen, QColor, QCursor, QMouseEvent, QIcon, QKeySequence, QPalette, QBrush, QPixmap, \
+    QFont
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph.opengl as gl
@@ -28,7 +29,8 @@ POINT_SIZE = 10
 APP_WIDTH = 1320
 APP_HEIGHT = 500
 ICON_PATH = 'c_plus/select.ico'
-
+UNIFIED_FONT_SIZE = 10
+UNIFIED_FONT = QFont("SimSun", UNIFIED_FONT_SIZE)
 
 class Point:
     def __init__(self, x, y, name, color=None):
@@ -533,6 +535,7 @@ class ResultPainter(QWidget):
         self.hide()
         self.descLabel = QLabel(self)
         self.descLabel.setGeometry(20, 380, 260, 400)
+        self.descLabel.setFont(UNIFIED_FONT)
         self.descLabel.setText("说明：\n"
                                "    鼠标悬停在点上的时候，第一个数字表示该节点的标识，第二个数字表示该节点与社区内节点的链接数目，"
                                "第三个数字表示该节点与其他社区节点的链接数目。"
@@ -695,6 +698,7 @@ class ResultPainter(QWidget):
 
     def draw(self, qp):
         index = 0
+        qp.setFont(UNIFIED_FONT)
         for i in range(len(self.entropy)):
             try:
                 pen = QPen(QColor(self.ig.colors[i]), 1, QtCore.Qt.SolidLine)
@@ -705,7 +709,7 @@ class ResultPainter(QWidget):
             qp.setPen(pen)
             # qp.drawText(5, index * 20 + 20, "●")
             # qp.drawText(20, index * 20 + (len(self.entropy)+8)*20, "●"+'代表社区%d'%(index+1))
-            qp.drawText(20, index * 20 + 40, "●"+'代表社区%d'%(index+1))
+            qp.drawText(20, index * 20 * (UNIFIED_FONT_SIZE/12) + 40, "●"+'代表社区%d'%(index+1))
             pen = QPen(QtCore.Qt.black, 1, QtCore.Qt.SolidLine)
             qp.setPen(pen)
             # qp.drawText(20, index * 20 + 20,
@@ -719,7 +723,7 @@ class ResultPainter(QWidget):
             qp.drawText(20, 20, '{:<10}{}'.format('网络中的平均互信息值：', '%s' % (Q if Q is not None else '')))
         # qp.drawText(20, (index + 1) * 20, '{:<10}{}'.format('H(X|Y)值的总和：', '%.6f'%(sum([i for i in self.entropy]))))
         # qp.drawText(20, (index + 1) * 20, '{:<10}{}'.format('信息熵的总和：', '%.6f'%(sum([i for i in self.entropy]))))
-        self.descLabel.setGeometry(20, (index + 2) * 20, 260, 400)
+        self.descLabel.setGeometry(20, (index + 2) * 20 * (UNIFIED_FONT_SIZE/12), 260, 400)
         if self.trigger:
             qp.drawText(15, 200, "输出：%f" % sum([i for i in self.entropy]))
 
@@ -1381,8 +1385,8 @@ class InteractGraph(QMainWindow):
         if self.menuState:
             for a in self.menuBar().actions()[1:]:
                 self.menuBar().removeAction(a)
-            self.menuBar().addSeparator()
-            self.menuBar().addAction('&绘制关系图', self.network.drawGraph)
+            # self.menuBar().addSeparator()
+            # self.menuBar().addAction('&绘制关系图', self.network.drawGraph)
             self.menuBar().addSeparator()
             self.menuBar().addAction('&帮助', self.about)
         else:
