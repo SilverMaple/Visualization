@@ -642,9 +642,9 @@ class ResultPainter(QWidget):
             qp.setPen(pen)
             # qp.drawText(5, index * 20 + 20, "●")
             # qp.drawText(20, index * 20 + (len(self.entropy)+8)*20, "●"+'代表社区%d'%(index+1))
-            img = QImage('c_plus/%s.png'%(SHAPE_CONFIG[i])).scaled(QSize(10, 10), Qt.IgnoreAspectRatio)
+            img = QImage('c_plus/%s.png'%(SHAPE_CONFIG[i])).scaled(QSize(15, 15), Qt.IgnoreAspectRatio)
             # 显示形状
-            qp.drawImage(20, (index-.5) * 20 * (UNIFIED_FONT_SIZE/12) + 40, img)
+            qp.drawImage(20, (index-.8) * 20 * (UNIFIED_FONT_SIZE/12) + 40, img)
             qp.drawText(40, index * 20 * (UNIFIED_FONT_SIZE/12) + 40, '代表社区%d'%(index+1))
             # 只显示颜色不显示形状
             # qp.drawText(20, index * 20 * (UNIFIED_FONT_SIZE/12) + 40, "●"+'代表社区%d'%(index+1))
@@ -862,6 +862,7 @@ class NetworkScene(QGraphicsScene):
     def reload(self):
         for i in range(len(self.ig.points)):
             self.buttons[i].move(self.ig.points[i].x, self.ig.points[i].y)
+            self.buttonLabels[i].move(self.ig.points[i].x+LABEL_PADDING, self.ig.points[i].y+LABEL_PADDING)
 
         for i in range(len(self.ig.lines)):
             # 初始化默认显示所有
@@ -1416,6 +1417,7 @@ class InteractGraph(QMainWindow):
 
     def loadData(self):
         sourceDir = QFileDialog.getExistingDirectory()
+        print(sourceDir)
         targetDir = os.getcwd().replace('\\', '/')
         copyFiles = [NETWORK_FILE, COMMUNITY_FILE, MUTUAL_INFORMATION_FILE]
         print(copyFiles)
