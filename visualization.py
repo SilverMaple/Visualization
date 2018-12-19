@@ -29,8 +29,10 @@ OUTPUT_BETWEEN_LINES_FILE = C_PLUS_DIR + '/community_edge.txt'
 
 # COLOR_CONFIG = ["#FF0099FF", "#CC00FFFF", "#3300FFFF", "#0066FFFF", "#00FFFFFF", "#00FF66FF",
 #               "#33FF00FF", "#CCFF00FF", "#FF9900FF", "#FF0000FF", "#000000FF"]
-COLOR_CONFIG = ["#FF0000FF", "#3300FFFF", "#33FF00FF", "#FF9900FF", "#CC00FFFF",
-                "#0066FFFF", "#00FFFFFF", "#006400FF", "#CCFF00FF", "#FF0099FF", "#000000FF"]
+COLOR_CONFIG = ["#FF0000FF", "#0066FFFF", "#CC00FFFF", "#33FF00FF", "#FF9900FF",
+                "#3300FFFF", "#00FFFFFF", "#006400FF", "#CCFF00FF", "#FF0099FF", "#000000FF"]
+SHAPE_CONFIG = ["circle", "triangle-up", "rectangle", "star", "diamond",
+                "triangle-down", "darts", "cross", "arrow", "heart", "triangle-down"]
 
 
 class Community():

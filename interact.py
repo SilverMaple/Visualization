@@ -8,7 +8,10 @@
 # warnings.simplefilter("error")
 import shutil
 from threading import _start_new_thread
-from visualization import Network, Community, COMMUNITY_FILE, NETWORK_FILE, MUTUAL_INFORMATION_FILE, COLOR_CONFIG
+
+from PIL import Image
+
+from visualization import Network, Community, COMMUNITY_FILE, NETWORK_FILE, MUTUAL_INFORMATION_FILE, COLOR_CONFIG, SHAPE_CONFIG
 from FR import FRLayout, FR3DLayout
 from KK import KKLayout
 import sys
@@ -18,7 +21,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QGraphicsView, QGr
     QMessageBox, QWidget, QPushButton, QGraphicsLineItem, QLabel, QAction, QShortcut, QInputDialog, QLineEdit, \
     QFileDialog
 from PyQt5.QtGui import QPainter, QPen, QColor, QCursor, QMouseEvent, QIcon, QKeySequence, QPalette, QBrush, QPixmap, \
-    QFont
+    QFont, QImage
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph.opengl as gl
@@ -26,11 +29,62 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 POINT_SIZE = 10
+# POINT_SIZE = 10
 APP_WIDTH = 1320
 APP_HEIGHT = 500
 ICON_PATH = 'c_plus/select.ico'
 UNIFIED_FONT_SIZE = 10
 UNIFIED_FONT = QFont("SimSun", UNIFIED_FONT_SIZE)
+
+# oringinal style sheet
+'''
+            QPushButton{
+            background-color: %s ;
+            border-style: outset;
+            border-width: 1px;
+            border-radius: 5px;
+            border-color: black;
+            font: 1px;
+            padding: 0px;
+            }
+            QPushButton:hover {
+            background-color: %s;
+            border-style: inset;
+            }
+            QPushButton:pressed {
+            background-color: rgb(224, 0, 0);
+            border-style: inset;
+            }
+            QPushButton#cancel{
+                background-color: red ;
+            }
+            '''
+CSS_BUTTON_STYLE_SHEET_DELETE = '''
+            QPushButton{
+            background-color: %s ;
+            border-style: outset;
+            border-width: 0px;
+            border-radius: 5px;
+            border-color: black;
+            font: 1px;
+            padding: 0px;
+            background-color: rgb(0, 0, 0, 0);
+            }
+            QPushButton:hover {
+            background-color: %s;
+            border-width: 1px;
+            border-style: inset;
+            }
+            QPushButton:pressed {
+            background-color: rgb(224, 0, 0);
+            border-style: inset;
+            }
+            QPushButton#cancel{
+                background-color: red ;
+            }
+            '''
+CSS_BUTTON_STYLE_SHEET = CSS_BUTTON_STYLE_SHEET_DELETE%('%s', 'yellow')
+
 
 class Point:
     def __init__(self, x, y, name, color=None):
@@ -61,13 +115,13 @@ class IconManager():
 
         plt.pie(colorDict.values(), colors=colorDict.keys())
         plt.axis('equal')
-        # plt.axis('off')
-        # fig = plt.gcf()
-        # plt.gca().xaxis.set_major_locator(plt.NullLocator())
-        # plt.gca().yaxis.set_major_locator(plt.NullLocator())
-        # plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
-        # plt.margins(0,0)
-        # fig.savefig('a.png', format='png', transparent=True, dpi=10, pad_inches = 0)
+        plt.axis('off')
+        fig = plt.gcf()
+        plt.gca().xaxis.set_major_locator(plt.NullLocator())
+        plt.gca().yaxis.set_major_locator(plt.NullLocator())
+        plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
+        plt.margins(0,0)
+        fig.savefig('a.png', format='png', transparent=True, dpi=10, pad_inches = 0)
         plt.savefig('a.svg', dpi=10, pad_inches=0, transparent=True)
 
     def getIcon(self, index):
@@ -115,28 +169,7 @@ class PointButton(QPushButton):
     def __init__(self, ig, index, color, *args):
         QPushButton.__init__(self, *args)
         self.setMouseTracking(True)
-        self.setStyleSheet(('''
-        QPushButton{
-        background-color: %s ;
-        border-style: outset;
-        border-width: 1px;
-        border-radius: 5px;
-        border-color: black;
-        font: 1px;
-        padding: 0px;
-        }
-        QPushButton:hover {
-        background-color: yellow;
-        border-style: inset;
-        }
-        QPushButton:pressed {
-        background-color: rgb(224, 0, 0);
-        border-style: inset;
-        }
-        QPushButton#cancel{
-            background-color: red ;
-        }
-        ''') % color)
+        self.setStyleSheet((CSS_BUTTON_STYLE_SHEET) % color)
         self.color = color
         self.changeColor = None
         self.ig = ig
@@ -176,28 +209,7 @@ class PointButton(QPushButton):
         else:
             self.selectedCommunity = ci
             self.changeColor = self.ig.colors[ci]
-            self.setStyleSheet(('''
-            QPushButton{
-            background-color: %s ;
-            border-style: outset;
-            border-width: 1px;
-            border-radius: 5px;
-            border-color: black;
-            font: 1px;
-            padding: 0px;
-            }
-            QPushButton:hover {
-            background-color: yellow;
-            border-style: inset;
-            }
-            QPushButton:pressed {
-            background-color: rgb(224, 0, 0);
-            border-style: inset;
-            }
-            QPushButton#cancel{
-                background-color: red ;
-            }
-            ''') % self.changeColor)
+            self.setStyleSheet((CSS_BUTTON_STYLE_SHEET) % self.changeColor)
             for line in vLineScene.lineItem:
                 anotherPoint = None
                 if line.a == self.index+1:
@@ -235,28 +247,7 @@ class PointButton(QPushButton):
     def restore(self, saveColor=None):
         if not saveColor and self.changeColor:
             self.changeColor = None
-            self.setStyleSheet(('''
-                QPushButton{
-                background-color: %s ;
-                border-style: outset;
-                border-width: 1px;
-                border-radius: 5px;
-                border-color: black;
-                font: 1px;
-                padding: 0px;
-                }
-                QPushButton:hover {
-                background-color: yellow;
-                border-style: inset;
-                }
-                QPushButton:pressed {
-                background-color: rgb(224, 0, 0);
-                border-style: inset;
-                }
-                QPushButton#cancel{
-                    background-color: red ;
-                }
-                ''') % self.color)
+            self.setStyleSheet((CSS_BUTTON_STYLE_SHEET) % self.color)
         self.resize(10, 10)
         self.setWindowOpacity(1)
 
@@ -306,28 +297,7 @@ class PointButton(QPushButton):
 
     def mousePressEvent(self, event):
         if Qt.MiddleButton == event.button():
-            self.setStyleSheet(('''
-            QPushButton{
-            background-color: %s ;
-            border-style: outset;
-            border-width: 1px;
-            border-radius: 5px;
-            border-color: black;
-            font: 1px;
-            padding: 0px;
-            }
-            QPushButton:hover {
-            background-color: %s;
-            border-style: inset;
-            }
-            QPushButton:pressed {
-            background-color: rgb(224, 0, 0);
-            border-style: inset;
-            }
-            QPushButton#cancel{
-                background-color: red ;
-            }
-            ''') % (self.color, self.color))
+            self.setStyleSheet((CSS_BUTTON_STYLE_SHEET_DELETE) % (self.color, self.color))
             self.leaveEvent(event)
             vpResultView.updateEntropy(dot=self.index)
             message = 'press at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
@@ -346,51 +316,9 @@ class PointButton(QPushButton):
 
     def enterEvent(self, *args, **kwargs):
         if self.changeColor:
-            self.setStyleSheet(('''
-            QPushButton{
-            background-color: %s ;
-            border-style: outset;
-            border-width: 1px;
-            border-radius: 5px;
-            border-color: black;
-            font: 1px;
-            padding: 0px;
-            }
-            QPushButton:hover {
-            background-color: yellow;
-            border-style: inset;
-            }
-            QPushButton:pressed {
-            background-color: rgb(224, 0, 0);
-            border-style: inset;
-            }
-            QPushButton#cancel{
-                background-color: red ;
-            }
-            ''') % self.changeColor)
+            self.setStyleSheet((CSS_BUTTON_STYLE_SHEET) % self.changeColor)
         else:
-            self.setStyleSheet(('''
-            QPushButton{
-            background-color: %s ;
-            border-style: outset;
-            border-width: 1px;
-            border-radius: 5px;
-            border-color: black;
-            font: 1px;
-            padding: 0px;
-            }
-            QPushButton:hover {
-            background-color: yellow;
-            border-style: inset;
-            }
-            QPushButton:pressed {
-            background-color: rgb(224, 0, 0);
-            border-style: inset;
-            }
-            QPushButton#cancel{
-                background-color: red ;
-            }
-            ''') % self.color)
+            self.setStyleSheet((CSS_BUTTON_STYLE_SHEET) % self.color)
         inLineSum = 0
         outLineSum = 0
         regionCount = {c: 0 for c in self.ig.colors}
@@ -709,7 +637,12 @@ class ResultPainter(QWidget):
             qp.setPen(pen)
             # qp.drawText(5, index * 20 + 20, "●")
             # qp.drawText(20, index * 20 + (len(self.entropy)+8)*20, "●"+'代表社区%d'%(index+1))
-            qp.drawText(20, index * 20 * (UNIFIED_FONT_SIZE/12) + 40, "●"+'代表社区%d'%(index+1))
+            img = QImage('c_plus/%s.png'%(SHAPE_CONFIG[i])).scaled(QSize(10, 10), Qt.IgnoreAspectRatio)
+            # 显示形状
+            qp.drawImage(20, (index-.5) * 20 * (UNIFIED_FONT_SIZE/12) + 40, img)
+            qp.drawText(40, index * 20 * (UNIFIED_FONT_SIZE/12) + 40, '代表社区%d'%(index+1))
+            # 只显示颜色不显示形状
+            # qp.drawText(20, index * 20 * (UNIFIED_FONT_SIZE/12) + 40, "●"+'代表社区%d'%(index+1))
             pen = QPen(QtCore.Qt.black, 1, QtCore.Qt.SolidLine)
             qp.setPen(pen)
             # qp.drawText(20, index * 20 + 20,
@@ -888,9 +821,8 @@ class NetworkScene(QGraphicsScene):
             # # palette1.setColor(self.backgroundRole(), QColor(192,253,123))   # 设置背景颜色
             # palette1.setBrush(b.backgroundRole(), QBrush(QPixmap('a.png')))  # 设置背景图片
             # b.setPalette(palette1)
-            # b.setIcon(QIcon("a.png"))
-            # b.setIconSize(QSize(25, 25))
-            # b.setParent(self)
+            b.setIcon(QIcon("c_plus/%s.png"%(SHAPE_CONFIG[b.ofCommunity])))
+            b.setIconSize(QSize(10, 10))
             self.addWidget(b)
             b.setAttribute(Qt.WA_TranslucentBackground, True)
             b.show()
@@ -1649,8 +1581,8 @@ class InteractGraph(QMainWindow):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
 
-    # ic = IconManager()
-    # ic.generateIcon()
+    ic = IconManager()
+    ic.generateIcon()
     ig = InteractGraph()
     ig.setWindowTitle("AMI可视化分析软件")
     # ig.showData()
