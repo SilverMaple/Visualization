@@ -1,5 +1,5 @@
 # Visualization
-Information Entropy Visualization
+Information Entropy Visualization  
     1.	信息熵可视化程序主要功能如下：  
     a)	生成数据集网络图  
     b)	提供节点、边交互功能  
