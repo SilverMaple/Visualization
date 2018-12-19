@@ -35,6 +35,8 @@ APP_HEIGHT = 500
 ICON_PATH = 'c_plus/select.ico'
 UNIFIED_FONT_SIZE = 10
 UNIFIED_FONT = QFont("SimSun", UNIFIED_FONT_SIZE)
+LABEL_FONT = QFont("Times New Roman", UNIFIED_FONT_SIZE)
+LABEL_PADDING = 8
 
 # oringinal style sheet
 '''
@@ -71,18 +73,16 @@ CSS_BUTTON_STYLE_SHEET_DELETE = '''
             background-color: rgb(0, 0, 0, 0);
             }
             QPushButton:hover {
-            background-color: %s;
             border-width: 1px;
+            background-color: %s;
             border-style: inset;
             }
             QPushButton:pressed {
-            background-color: rgb(224, 0, 0);
+            background-color: rgb(224, 0, 0, 0);
             border-style: inset;
             }
-            QPushButton#cancel{
-                background-color: red ;
-            }
             '''
+CSS_BUTTON_STYLE_SHEET_MID = CSS_BUTTON_STYLE_SHEET_DELETE%('%s', 'rgb(0, 0, 0, 0);border-width: 0px')
 CSS_BUTTON_STYLE_SHEET = CSS_BUTTON_STYLE_SHEET_DELETE%('%s', 'yellow')
 
 
@@ -259,6 +259,8 @@ class PointButton(QPushButton):
             self.ig.points[self.index].x = x
             self.ig.points[self.index].y = y
             self.move(x, y)
+            vLineScene.buttonLabels[self.index].move(x+LABEL_PADDING, y+LABEL_PADDING)
+            # self.ig.vpViews[2].buttonLabels[self.index].move(x, y)
             for l in vLineScene.lineItem:
                 if l.a == self.index+1 or l.b == self.index+1:
                     x = self.ig.points[l.a - 1].x + POINT_SIZE / 2
@@ -297,13 +299,16 @@ class PointButton(QPushButton):
 
     def mousePressEvent(self, event):
         if Qt.MiddleButton == event.button():
-            self.setStyleSheet((CSS_BUTTON_STYLE_SHEET_DELETE) % (self.color, self.color))
+            # self.setStyleSheet((CSS_BUTTON_STYLE_SHEET_DELETE) % (self.color, self.color))
+            self.setStyleSheet((CSS_BUTTON_STYLE_SHEET_MID) % (self.color))
             self.leaveEvent(event)
             vpResultView.updateEntropy(dot=self.index)
             message = 'press at point[ ' + self.text() + ' ]: ' + str(event.pos().x()) + ' ' + str(event.pos().y())
             # print('press at point[ ', self.text(), ' ]: ', event.pos().x(), event.pos().y())
             self.ig.points[self.index].display = False
             self.hide()
+            print(self.windowState())
+            vLineScene.buttonLabels[self.index].hide()
             vLineScene.leavePoint()
             vLineScene.updateScene()
             vpFrontView.update()
@@ -810,6 +815,7 @@ class NetworkScene(QGraphicsScene):
         super().__init__(*__args)
         self.ig = ig
         self.buttons = []
+        self.buttonLabels = []
         for i in range(len(self.ig.points)):
 
             b = PointButton(self.ig, i, self.ig.points[i].color)
@@ -823,9 +829,18 @@ class NetworkScene(QGraphicsScene):
             # b.setPalette(palette1)
             b.setIcon(QIcon("c_plus/%s.png"%(SHAPE_CONFIG[b.ofCommunity])))
             b.setIconSize(QSize(10, 10))
+            textLabel = QLabel(str(i+1))
+            textLabel.setText(str(i+1))
+            textLabel.setFont(LABEL_FONT)
+            textLabel.move(b.mapFromGlobal(b.getGlobalPos())+QPoint(LABEL_PADDING, LABEL_PADDING))
+            textLabel.setWordWrap(True)
+            textLabel.setAttribute(Qt.WA_TranslucentBackground, True)
+            textLabel.raise_()
+            self.addWidget(textLabel)
             self.addWidget(b)
             b.setAttribute(Qt.WA_TranslucentBackground, True)
             b.show()
+            self.buttonLabels.append(textLabel)
             self.buttons.append(b)
 
         self.lineItem = []
@@ -888,6 +903,7 @@ class NetworkScene(QGraphicsScene):
     def restoreScene(self):
         for i in range(len(self.buttons)):
             self.buttons[i].show()
+            self.buttonLabels[i].show()
             self.buttons[i].restore()
             self.ig.points[i].display = True
 
@@ -1376,8 +1392,10 @@ class InteractGraph(QMainWindow):
     b)	提供节点、边交互功能
     C)	计算信息熵与生成相应图表
     2. 按键功能说明：
-    Ctrl   +   O: 打开数据文件 //未涉及
+    Ctrl   +   O: 打开数据文件 
     Ctrl   +   D: 还原当前数据
+    Ctrl   +   F: 搜索指定节点
+    Ctrl   +   R: 重载当前数据
     Ctrl   +   S: 保存当前数据 //未涉及
     Wheel   Up：放大
     Wheel Down：缩小
@@ -1570,12 +1588,16 @@ class InteractGraph(QMainWindow):
         # if index in range(len(vLineScene.buttons)):
         #     vLineScene.focusPoint(index)
         try:
-            index = int(index) - 1
+            # index = int(index) - 1
             if index in range(len(vLineScene.buttons)):
                 vLineScene.focusPoint(index)
+            else:
+                tipBox = QMessageBox.about(self, "错误", '输入节点不存在！')
         except Exception as e:
             print(e)
             messenger.changeStatusBar('Error ID input.')
+            tipBox = QMessageBox.about(self, "帮助", 'Error ID input.')
+            tipBox.show()
 
 
 if __name__ == '__main__':
