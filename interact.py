@@ -28,6 +28,7 @@ import pyqtgraph.opengl as gl
 import matplotlib.pyplot as plt
 import numpy as np
 
+
 POINT_SIZE = 10
 # POINT_SIZE = 10
 APP_WIDTH = 1320
@@ -35,7 +36,7 @@ APP_HEIGHT = 500
 ICON_PATH = 'c_plus/select.ico'
 UNIFIED_FONT_SIZE = 10
 UNIFIED_FONT = QFont("SimSun", UNIFIED_FONT_SIZE)
-LABEL_FONT = QFont("Times New Roman", UNIFIED_FONT_SIZE)
+LABEL_FONT = QFont("Times New Roman", 12)
 LABEL_PADDING = 8
 
 # oringinal style sheet
@@ -121,8 +122,8 @@ class IconManager():
         plt.gca().yaxis.set_major_locator(plt.NullLocator())
         plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
         plt.margins(0,0)
-        fig.savefig('a.png', format='png', transparent=True, dpi=10, pad_inches = 0)
-        plt.savefig('a.svg', dpi=10, pad_inches=0, transparent=True)
+        # fig.savefig('a.png', format='png', transparent=True, dpi=10, pad_inches = 0)
+        # plt.savefig('a.svg', dpi=10, pad_inches=0, transparent=True)
 
     def getIcon(self, index):
         pass
@@ -178,6 +179,7 @@ class PointButton(QPushButton):
         self.y = self.ig.points[index].y
         self.dragging = False
         self.ofCommunity = None
+        self.raise_()
         for ci in range(len(self.ig.network.communities)):
             if index+1 in self.ig.network.communities[ci].vertexes:
                 self.ofCommunity = ci
@@ -318,7 +320,6 @@ class PointButton(QPushButton):
         elif Qt.LeftButton == event.button():
             self.dragging = True
 
-
     def enterEvent(self, *args, **kwargs):
         if self.changeColor:
             self.setStyleSheet((CSS_BUTTON_STYLE_SHEET) % self.changeColor)
@@ -379,6 +380,10 @@ class LineItem(QGraphicsLineItem):
         self.color = color
         self.changeColor = None
         self.width = 1
+        self.focus_opacity = 1
+        self.normal_opacity = 0.3
+        self.ignore_opacity = 0.1
+        self.setOpacity(self.normal_opacity)
         self.setZValue(-1)
         # 设置画笔
         pen = self.pen()
@@ -410,7 +415,7 @@ class LineItem(QGraphicsLineItem):
         self.update()
 
     def restore(self, saveColor=None):
-        self.setOpacity(1)
+        self.setOpacity(self.normal_opacity)
         pen = self.pen()
         if not saveColor:
             self.changeColor = None
@@ -423,10 +428,13 @@ class LineItem(QGraphicsLineItem):
         self.hoverLeaveEvent(*args, **kwargs)
         vpResultView.updateEntropy(pair=(self.a, self.b))
         self.ig.lines[self.index].display = False
+        print(self.isVisible())
         self.hide()
+        print(self.isVisible())
         self.view.update()
         vpFrontView.update()
         vpResultView.update()
+        print(self.isVisible())
         messenger.changeStatusBar('mousePress for:%s' % self.name)
 
     def hoverEnterEvent(self, *args, **kwargs):
@@ -882,11 +890,11 @@ class NetworkScene(QGraphicsScene):
         self.buttons[index].resize(15, 15)
         for line in self.lineItem:
             if line.a == index + 1 or line.b == index + 1:
-                line.setOpacity(1)
+                line.setOpacity(line.focus_opacity)
                 line.focus()
             else:
                 line.restore(saveColor=True)
-                line.setOpacity(.3)
+                line.setOpacity(line.ignore_opacity)
 
     def leavePoint(self, saveColor=None):
         if saveColor:
@@ -1076,7 +1084,9 @@ class InteractGraph(QMainWindow):
         self.menuBar().addMenu(self.file_menu)
 
         self.menuBar().addSeparator()
-        self.menuBar().addAction('&3D图显示/关闭', self.change3DViewState)
+        self.menuBar().addAction('&布局过程3D图显示/关闭', self.change3DViewState)
+        self.menuBar().addSeparator()
+        self.menuBar().addAction('&算法过程3D图显示/关闭', self.changeAlgorithm3DViewState)
         self.menuBar().addSeparator()
         self.layout_menu = QMenu('&布局选择', self)
         self.layout_menu.addAction('&FR布局', self.reloadFRLayout)
@@ -1112,8 +1122,9 @@ class InteractGraph(QMainWindow):
         vpFrontView = ViewPainter(self)
         vpResultView = ResultPainter(self)
         v3DView = None
-        # v3DView = self.get3DView()
+        vAlgorithm3DView = None
         self.v3DView = v3DView
+        self.vAlgorithm3DView = vAlgorithm3DView
         # v3DView.setAutoBufferSwap(False)
         # v3DView.show()
 
@@ -1280,6 +1291,95 @@ class InteractGraph(QMainWindow):
             self.v3DView.show()
             self.timer.start()
 
+    def getAlgorithm3DView(self, dynamic=None):
+        # w = ThreeDView(self)
+        # w.opts['distance'] = 10
+        # w.hide()
+        # w.setWindowTitle('Network 3D Graph For Algorithm')
+        #
+        # g = gl.GLGridItem()
+        # w.addItem(g)
+        #
+        # colors = []
+        # fr = FR3DLayout()
+        # for s in COLOR_CONFIG[:-1]:
+        #     r = int(s[1:3], 16)
+        #     g = int(s[3:5], 16)
+        #     b = int(s[5:7], 16)
+        #     colors.append((r, g, b, 255))
+        # colors.append((1, 1, 1, 255))
+        #
+        # '''
+        # 绘制圆环
+        # '''
+        # # pltBox = gl.GLBoxItem(size=QtGui.QVector3D(5,5,5), color=colors[0])
+        # # w.addItem(pltBox)
+        # n = 34
+        # for i in range(2):
+        #     vertsUp = np.empty((n, 3, 3), dtype=np.float32)
+        #     theta = np.linspace(0, 2 * np.pi, n+1)[:-1]
+        #     vertsUp[:, 0] = np.vstack([np.cos(theta+0.2*(i%2)), np.sin(theta+0.2*(i%2)), [.5-((i+1)%2)] * n]).T
+        #     vertsUp[:, 1] = np.vstack([np.cos(theta+0.2*((i+1)%2)), np.sin(theta+0.2*((i+1)%2)), [.5-(i%2)] * n]).T
+        #     vertsUp[:, 2] = np.vstack([np.cos(theta+0.2*(i%2)), np.sin(theta+0.2*(i%2)), [.5-(i%2)] * n]).T
+        #     m2 = gl.GLMeshItem(vertexes=vertsUp, color=(0, 1, 0, 1))
+        #     m2.scale(2, 2, .5)
+        #     w.addItem(m2)
+        #     if i == 0:
+        #         for v, i in enumerate(vertsUp[:, 0]):
+        #             print(v)
+        #             x = [v[0], v[0]*2]
+        #             y = [v[1], v[1]*2]
+        #             z = [0, 0]
+        #             pts = np.vstack([x, y, z]).transpose()
+        #             l = gl.GLLinePlotItem(pos=pts, color=(1, 0, 0, 1), width=100, antialias=True)
+        #             l.scale(2, 2, 1)
+        #             # w.addItem(l)
+        #
+        # self.vAlgorithm3DView = w
+        # if dynamic:
+        #     # 显示动态过程
+        #     self.dynamicPointsIndex = 0
+        #     self.timer = QtCore.QTimer()
+        #     self.timer.timeout.connect(self.updateAlgorithmView)
+        #     self.timer.start(100)
+        #     print('start timer')
+        from algorithmView import OpenGLView
+        v = OpenGLView()
+        print('new s')
+        v.MUTUAL_INFORMATION_FILE = MUTUAL_INFORMATION_FILE
+        v.getCommunity()
+        print('get s')
+        w = v.openView()
+        print('open s')
+        return w
+
+    def updateAlgorithmView(self):
+        pass
+
+    def changeAlgorithm3DViewState(self):
+        message = '算法过程3D视图创建中...'
+        print(message)
+        messenger.changeStatusBar(message)
+        self.getAlgorithm3DView(dynamic=True)
+        message = '算法过程3D视图创建完成'
+        print(message)
+        messenger.changeStatusBar(message)
+        # if self.vAlgorithm3DView is None:
+        #     message = '3D视图创建中...'
+        #     print(message)
+        #     messenger.changeStatusBar(message)
+        #     vAlgorithm3DView = self.getAlgorithm3DView(dynamic=True)
+        #     self.vAlgorithm3DView = vAlgorithm3DView
+        #     self.vAlgorithm3DView.show()
+        #     return
+        # if self.vAlgorithm3DView.isVisible():
+        #     self.vAlgorithm3DView.hide()
+        #     self.timer.stop()
+        # else:
+        #     self.vAlgorithm3DView.resize(400, 400)
+        #     self.vAlgorithm3DView.show()
+        #     self.timer.start()
+
     def center(self):  # 主窗口居中显示函数
         screen = QtGui.QDesktopWidget().screenGeometry()
         self.move((screen.width() - APP_WIDTH) / 2, (screen.height() - APP_HEIGHT) / 2)
@@ -1342,7 +1442,10 @@ class InteractGraph(QMainWindow):
             for a in self.menuBar().actions()[1:]:
                 self.menuBar().removeAction(a)
             self.menuBar().addSeparator()
-            self.menuBar().addAction('&3D图显示/关闭', self.change3DViewState)
+            self.menuBar().addAction('&布局过程3D图显示/关闭', self.change3DViewState)
+            self.menuBar().addSeparator()
+            self.menuBar().addAction('&算法过程3D图显示/关闭', self.changeAlgorithm3DViewState)
+            self.menuBar().addSeparator()
             self.menuBar().addSeparator()
             self.menuBar().addMenu(self.layout_menu)
             self.menuBar().addSeparator()
@@ -1609,6 +1712,5 @@ if __name__ == '__main__':
     ic.generateIcon()
     ig = InteractGraph()
     ig.setWindowTitle("AMI可视化分析软件")
-    # ig.showData()
     ig.show()
     app.exec_()
